@@ -1,0 +1,1 @@
+-keepclassmembers class dev.diego.expanda.data.** { *; }

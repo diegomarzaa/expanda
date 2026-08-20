@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Expanda</string>
+    <string name="accessibility_service_label">Expanda text expansion</string>
+    <string name="accessibility_service_description">Detects abbreviations typed into editable fields and replaces them with snippets stored only on this device. Password fields are ignored.</string>
+</resources>
