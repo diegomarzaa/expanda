@@ -1,0 +1,1 @@
+Expansión de texto libre y local con snippets, templates y acciones.

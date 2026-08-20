@@ -1,0 +1,3 @@
+Primera versión pública estable.
+
+Añade expansión entre aplicaciones, tags, varios templates, tokens dinámicos, formularios, acciones de texto, popup de sugerencias, historial de portapapeles, copias, estadísticas locales y temas Material personalizables.

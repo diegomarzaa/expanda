@@ -1,0 +1,19 @@
+<p>Expanda is a free and open-source text expander for Android. Create reusable snippets and insert them in editable fields across your apps.</p>
+
+<p>Expanda works on your device and does not declare the Internet permission. It has no accounts, ads, analytics or tracking SDKs.</p>
+
+<p>Features:</p>
+<ul>
+  <li>Delimiter-based and instant text expansion</li>
+  <li>Multiple tags and templates per snippet</li>
+  <li>First, random, sequential and manual template selection</li>
+  <li>Dynamic forms, dates, times, clipboard text, nested snippets and cursor placement</li>
+  <li>Movable suggestion popup with snippets and text actions</li>
+  <li>Text formatting, calculations, selection, deletion and clipboard actions</li>
+  <li>Per-app exclusions and configurable matching</li>
+  <li>Optional local clipboard history and usage statistics</li>
+  <li>JSON backup and CSV import/export</li>
+  <li>Material wallpaper, default and custom colors with light, dark and AMOLED modes</li>
+</ul>
+
+<p>Expanda uses Android's Accessibility service to detect shortcuts and replace text in other apps. Password fields are ignored. The app explains this access before opening Android's settings, and you can disable the service at any time.</p>

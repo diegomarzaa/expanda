@@ -1,0 +1,1 @@
+Offline, open-source text expansion with snippets, templates and actions.

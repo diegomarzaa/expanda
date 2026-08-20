@@ -1,0 +1,98 @@
+name: Bug or compatibility report
+description: Report a reproducible problem without sharing private text
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Expanda. Use fictional text in examples and remove contacts, clipboard contents and account information from screenshots or logs.
+  - type: input
+    id: version
+    attributes:
+      label: Expanda version
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+      placeholder: "Android 15"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and manufacturer
+      placeholder: "Google Pixel 8"
+    validations:
+      required: true
+  - type: input
+    id: keyboard
+    attributes:
+      label: Keyboard
+      placeholder: "Gboard"
+    validations:
+      required: true
+  - type: input
+    id: target_app
+    attributes:
+      label: App where the problem occurs
+      description: Include the app version if available.
+      placeholder: "Example Notes 2.4"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Text expansion
+        - Suggestion popup
+        - Template or form
+        - Text action
+        - Clipboard
+        - Import or export
+        - Settings or appearance
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Use a fictional shortcut and fictional text.
+      placeholder: |
+        1. Create ...
+        2. Open ...
+        3. Type ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Additional context
+      description: Attach sanitized screenshots or logs only when they help reproduce the issue.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed private text, clipboard contents, contacts and account information.
+          required: true
+        - label: I searched existing issues for the same problem.
+          required: true

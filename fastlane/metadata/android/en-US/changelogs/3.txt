@@ -1,0 +1,3 @@
+First stable public release.
+
+Adds cross-app text expansion, tags, multiple templates, dynamic tokens, forms, text actions, a movable suggestion popup, clipboard history, backups, local statistics and customizable Material themes.
