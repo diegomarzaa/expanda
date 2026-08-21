@@ -6,12 +6,16 @@
 
   <p>
     <a href="https://github.com/diegomarzaa/expanda/releases/latest"><img src="https://img.shields.io/github/v/release/diegomarzaa/expanda?label=Download&amp;logo=github" alt="Latest release"></a>
+    <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22dev.diego.expanda%22%2C%22url%22%3A%2F%2Fgithub.com%2Fdiegomarzaa%2Fexpanda%22%2C%22author%22%3A%22diegomarzaa%22%2C%22name%22%3A%22Expanda%22%7D"><img src="https://img.shields.io/badge/Get_it_on-Obtainium-2f80ed" alt="Get Expanda on Obtainium"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2ea44f.svg" alt="MIT License"></a>
     <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&amp;logoColor=white" alt="Android 8.0 or newer">
     <img src="https://img.shields.io/badge/Internet_permission-none-5c6bc0" alt="No Internet permission">
     <img src="https://img.shields.io/badge/Ads_%26_analytics-none-5c6bc0" alt="No ads or analytics">
   </p>
 </div>
+
+> [!WARNING]
+> I am not an Android developer. I built Expanda quickly for my own use with extensive help from AI, so parts of the code have not received thorough human review and bugs may remain. I am sharing it because others may find it useful and because community feedback can make it better for everyone. Bug reports and pull requests are welcome.
 
 ## See it in action
 
