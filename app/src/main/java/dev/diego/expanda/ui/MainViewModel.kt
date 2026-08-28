@@ -20,7 +20,7 @@ import dev.diego.expanda.data.EspansoSourceFile
 import dev.diego.expanda.data.MatchTrigger
 import dev.diego.expanda.data.OnboardingState
 import dev.diego.expanda.data.OnboardingStatus
-import dev.diego.expanda.data.initialOnboardingStatus
+import dev.diego.expanda.data.shouldShowTutorial
 import dev.diego.expanda.data.TextMatch
 import dev.diego.expanda.data.SnippetSortMode
 import dev.diego.expanda.data.ThemeMode
@@ -133,16 +133,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             repository.isReady.filter { it }.first()
-            if (onboardingStore.state.value.status == OnboardingStatus.UNINITIALIZED) {
-                when (initialOnboardingStatus(repository.matches.value.isNotEmpty())) {
-                    OnboardingStatus.ACTIVE -> {
-                        onboardingStore.activate()
-                    }
-                    OnboardingStatus.SKIPPED -> onboardingStore.skip()
-                    else -> Unit
-                }
+            val onboarding = onboardingStore.state.value
+            val hasMatches = repository.matches.value.isNotEmpty()
+            val upgradedFromPre03 = app.consumePendingTutorialAfterUpgrade()
+            val showTutorial = shouldShowTutorial(onboarding, hasMatches, upgradedFromPre03)
+            if (showTutorial) {
+                onboardingStore.activate()
+            } else if (onboarding.status == OnboardingStatus.UNINITIALIZED) {
+                onboardingStore.skip()
             }
-            if (!onboardingStore.state.value.workspaceReady && repository.matches.value.isNotEmpty()) {
+            if (!showTutorial &&
+                !onboardingStore.state.value.workspaceReady &&
+                hasMatches
+            ) {
                 onboardingStore.finishWorkspaceSetup()
             }
         }
@@ -218,6 +221,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSnippetEnabled(id: Long, enabled: Boolean) = viewModelScope.launch { repository.setEnabled(id, enabled) }
     fun setExpansionEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setEnabled(enabled) }
     fun acceptConsent() = viewModelScope.launch { settingsRepository.acceptConsent() }
+    fun dismissRestrictedSettingsHint() = viewModelScope.launch {
+        settingsRepository.dismissRestrictedSettingsHint()
+    }
     fun acknowledgeBackgroundSetup() = viewModelScope.launch { settingsRepository.acknowledgeBackgroundSetup() }
     fun setTheme(theme: ThemeMode) = viewModelScope.launch { settingsRepository.setTheme(theme) }
     fun setColorScheme(mode: ColorSchemeMode) = viewModelScope.launch { settingsRepository.setColorScheme(mode) }

@@ -1,7 +1,6 @@
 package dev.diego.expanda.ui
 
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,6 +33,9 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.AlertDialog
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -50,6 +52,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,17 +60,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import dev.diego.expanda.data.ESPANSO_WORD_PATTERN
 import dev.diego.expanda.data.TemplateVariable
+import dev.diego.expanda.data.formFieldInlineDefaults
+import dev.diego.expanda.data.formFieldNames
+import dev.diego.expanda.data.removeFormFieldPlaceholder
+import dev.diego.expanda.data.setFormFieldInlineDefault
 import dev.diego.expanda.data.isEspansoWord
 import dev.diego.expanda.data.TextMatch
+import dev.diego.expanda.engine.ChoiceLists
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -170,11 +179,6 @@ private data class FormFieldConfig(
     val defaultValue: String = "",
     val options: List<String> = emptyList(),
 )
-
-private val FORM_FIELD_REGEX =
-    Regex(
-        """\[\[\s*($ESPANSO_WORD_PATTERN)(?:=[^]]*)?\s*]]""",
-    )
 
 /**
  * The replacement palette.
@@ -600,9 +604,7 @@ internal fun TemplateVariableEditorDialog(
 
     var randomFromList by remember(variable) {
         mutableStateOf(
-            originalParams.optJSONArray(
-                "choices",
-            ) != null,
+            ChoiceLists.hasChoicesParam(originalParams),
         )
     }
 
@@ -637,10 +639,9 @@ internal fun TemplateVariableEditorDialog(
 
     var formFieldConfigs by remember(variable) {
         mutableStateOf(
-            parseFormFieldConfigs(
-                originalParams.optJSONObject(
-                    "fields",
-                ),
+            mergedFormFieldConfigs(
+                layout = valueFor(TemplateVariableKind.FORM, originalParams),
+                fields = originalParams.optJSONObject("fields"),
             ),
         )
     }
@@ -653,6 +654,15 @@ internal fun TemplateVariableEditorDialog(
         mutableStateOf(
             variable?.injectVars ?: true,
         )
+    }
+
+    LaunchedEffect(value) {
+        if (kind != TemplateVariableKind.FORM) return@LaunchedEffect
+        val inlineDefaults = formFieldInlineDefaults(value)
+        if (inlineDefaults.isEmpty()) return@LaunchedEffect
+        formFieldConfigs = formFieldConfigs.mapValues { (name, config) ->
+            inlineDefaults[name]?.let { config.copy(defaultValue = it) } ?: config
+        }
     }
 
     val reservedNames =
@@ -741,7 +751,7 @@ internal fun TemplateVariableEditorDialog(
 
             TemplateVariableKind.RANDOM ->
                 !randomFromList ||
-                    lines(value).isNotEmpty()
+                    ChoiceLists.parseEditorLines(value).isNotEmpty()
 
             TemplateVariableKind.DATE ->
                 offsetValid && timezoneValid
@@ -791,8 +801,7 @@ internal fun TemplateVariableEditorDialog(
                     JSONObject()
 
                 TemplateVariableKind.RANDOM -> {
-                    val choices =
-                        lines(value)
+                    val choices = ChoiceLists.parseEditorLines(value)
 
                     if (!randomFromList) {
                         JSONObject()
@@ -836,17 +845,19 @@ internal fun TemplateVariableEditorDialog(
                         )
 
                 TemplateVariableKind.FORM ->
-                    JSONObject()
-                        .put(
-                            "layout",
-                            value,
-                        )
-                        .apply {
-                            val fields =
-                                JSONObject()
+                    run {
+                        var layout = value
+                        formFieldNames(layout).forEach { fieldName ->
+                            val config = formFieldConfigs[fieldName] ?: FormFieldConfig()
+                            layout = setFormFieldInlineDefault(layout, fieldName, config.defaultValue)
+                        }
+                        val inlineDefaults = formFieldInlineDefaults(layout)
+                        JSONObject()
+                            .put("layout", layout)
+                            .apply {
+                                val fields = JSONObject()
 
-                            formFieldNames(value)
-                                .forEach { fieldName ->
+                                formFieldNames(layout).forEach { fieldName ->
                                     val config =
                                         formFieldConfigs[fieldName]
                                             ?: FormFieldConfig()
@@ -874,8 +885,8 @@ internal fun TemplateVariableEditorDialog(
                                             }
 
                                             if (
-                                                config.defaultValue
-                                                    .isNotBlank()
+                                                config.defaultValue.isNotBlank() &&
+                                                inlineDefaults[fieldName] != config.defaultValue
                                             ) {
                                                 put(
                                                     "default",
@@ -898,13 +909,14 @@ internal fun TemplateVariableEditorDialog(
                                     )
                                 }
 
-                            if (fields.length() > 0) {
-                                put(
-                                    "fields",
-                                    fields,
-                                )
+                                if (fields.length() > 0) {
+                                    put(
+                                        "fields",
+                                        fields,
+                                    )
+                                }
                             }
-                        }
+                    }
 
                 TemplateVariableKind.MATCH ->
                     JSONObject()
@@ -1275,16 +1287,8 @@ internal fun TemplateVariableEditorDialog(
                                 onOptionsChanged = {
                                     value = it.joinToString("\n")
                                 },
-                                emptyText = "Add the possible results.",
+                                emptyText = "Add one option per line.",
                             )
-
-                            val preview = lines(value).firstOrNull().orEmpty()
-                            if (preview.isNotBlank()) {
-                                PreviewCard(
-                                    title = "Example",
-                                    value = preview,
-                                )
-                            }
                         } else {
                             OutlinedTextField(
                                 value = randomLength,
@@ -1384,19 +1388,6 @@ internal fun TemplateVariableEditorDialog(
                                 value = it
                             },
                         )
-
-                        val preview =
-                            parseChoiceEditorOptions(value)
-                                .firstOrNull()
-                                ?.result
-                                .orEmpty()
-
-                        if (preview.isNotBlank()) {
-                            PreviewCard(
-                                title = "Example result",
-                                value = preview,
-                            )
-                        }
                     }
 
                     TemplateVariableKind.FORM -> {
@@ -1407,11 +1398,11 @@ internal fun TemplateVariableEditorDialog(
                             },
                             modifier = Modifier.fillMaxWidth(),
                             label = {
-                                Text("Text")
+                                Text("Layout")
                             },
                             supportingText = {
                                 Text(
-                                    "Write the text to insert. Add fields below when you need user input.",
+                                    "Use [[field]] placeholders. Optional defaults: [[field=value]].",
                                 )
                             },
                             minLines = 4,
@@ -1431,8 +1422,10 @@ internal fun TemplateVariableEditorDialog(
                                 value.trimEnd() +
                                     if (value.isBlank()) {
                                         "[[$field]]"
+                                    } else if ("[[$field]]" in value) {
+                                        ""
                                     } else {
-                                        "\n[[$field]]"
+                                        " [[$field]]"
                                     }
 
                             formFieldConfigs =
@@ -1445,51 +1438,58 @@ internal fun TemplateVariableEditorDialog(
                             newFormFieldName = ""
                         }
 
-                        OutlinedTextField(
-                            value = newFormFieldName,
-                            onValueChange = {
-                                newFormFieldName = it
-                            },
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            label = {
-                                Text("New field")
-                            },
-                            placeholder = {
-                                Text("Recipient")
-                            },
-                            singleLine = true,
-                            keyboardOptions =
-                                KeyboardOptions(
-                                    imeAction =
-                                        ImeAction.Done,
-                                ),
-                            keyboardActions =
-                                KeyboardActions(
-                                    onDone = {
-                                        addFormField()
-                                    },
-                                ),
-                            trailingIcon = {
-                                IconButton(
-                                    enabled =
-                                        normalizedFormFieldName(
-                                            newFormFieldName,
-                                        ).isNotBlank(),
-                                    onClick = {
-                                        addFormField()
-                                    },
-                                ) {
-                                    Icon(
-                                        Icons.Default.Check,
-                                        contentDescription =
-                                            "Add field",
-                                    )
-                                }
-                            },
-                        )
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                value = newFormFieldName,
+                                onValueChange = {
+                                    newFormFieldName = it
+                                },
+                                modifier = Modifier.weight(1f),
+                                label = {
+                                    Text("Add field")
+                                },
+                                placeholder = {
+                                    Text("recipient")
+                                },
+                                singleLine = true,
+                                keyboardOptions =
+                                    KeyboardOptions(
+                                        imeAction =
+                                            ImeAction.Done,
+                                    ),
+                                keyboardActions =
+                                    KeyboardActions(
+                                        onDone = {
+                                            addFormField()
+                                        },
+                                    ),
+                            )
+                            OutlinedButton(
+                                enabled =
+                                    normalizedFormFieldName(
+                                        newFormFieldName,
+                                    ).isNotBlank(),
+                                onClick = {
+                                    addFormField()
+                                },
+                            ) {
+                                Text("Add")
+                            }
+                        }
 
-                        formFieldNames(value)
-                            .forEach { fieldName ->
+                        val fieldNames = formFieldNames(value)
+                        if (fieldNames.isNotEmpty()) {
+                            Text(
+                                "Field settings",
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+
+                        fieldNames.forEach { fieldName ->
                                 val config =
                                     formFieldConfigs[fieldName]
                                         ?: FormFieldConfig()
@@ -1498,29 +1498,32 @@ internal fun TemplateVariableEditorDialog(
                                     Modifier.fillMaxWidth(),
                                 ) {
                                     Column(
-                                        Modifier.padding(
-                                            10.dp,
-                                        ),
-                                        verticalArrangement =
-                                            Arrangement.spacedBy(
-                                                8.dp,
-                                            ),
+                                        Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
                                     ) {
                                         Row(
                                             Modifier.fillMaxWidth(),
-                                            verticalAlignment =
-                                                Alignment.CenterVertically,
+                                            verticalAlignment = Alignment.CenterVertically,
                                         ) {
-                                            Text(
-                                                fieldName,
-                                                style = MaterialTheme.typography.titleSmall,
-                                                modifier = Modifier.weight(1f),
-                                            )
+                                            Column(Modifier.weight(1f)) {
+                                                Text(
+                                                    fieldName,
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                )
+                                                Text(
+                                                    formFieldToken(
+                                                        fieldName,
+                                                        config.defaultValue,
+                                                    ),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
 
                                             TextButton(
                                                 onClick = {
                                                     value =
-                                                        removeFormField(
+                                                        removeFormFieldPlaceholder(
                                                             value,
                                                             fieldName,
                                                         )
@@ -1532,109 +1535,107 @@ internal fun TemplateVariableEditorDialog(
                                             ) {
                                                 Text(
                                                     "Remove",
-                                                    color =
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .error,
+                                                    color = MaterialTheme.colorScheme.error,
                                                 )
                                             }
                                         }
 
-                                        LazyRow(
-                                            horizontalArrangement =
-                                                Arrangement.spacedBy(
-                                                    6.dp,
-                                                ),
-                                        ) {
-                                            items(
-                                                FormFieldKind
-                                                    .entries,
-                                            ) { option ->
-                                                FilterChip(
-                                                    selected =
-                                                        config.kind ==
-                                                            option,
-                                                    onClick = {
+                                        FormFieldTypePicker(
+                                            selected = config.kind,
+                                            onSelected = { kind ->
+                                                formFieldConfigs =
+                                                    formFieldConfigs +
+                                                        (
+                                                            fieldName to
+                                                                config.copy(
+                                                                    kind = kind,
+                                                                )
+                                                            )
+                                            },
+                                        )
+
+                                        when (config.kind) {
+                                            FormFieldKind.CHOICE -> {
+                                                EditableOptionList(
+                                                    options = config.options,
+                                                    onOptionsChanged = { options ->
+                                                        val nextDefault =
+                                                            config.defaultValue.takeIf { it in options }.orEmpty()
                                                         formFieldConfigs =
                                                             formFieldConfigs +
                                                                 (
                                                                     fieldName to
                                                                         config.copy(
-                                                                            kind =
-                                                                                option,
+                                                                            options = options,
+                                                                            defaultValue = nextDefault,
                                                                         )
-                                                                    )
+                                                                )
+                                                        value = setFormFieldInlineDefault(
+                                                            value,
+                                                            fieldName,
+                                                            nextDefault,
+                                                        )
                                                     },
-                                                    label = {
-                                                        Text(
-                                                            option.label,
+                                                    emptyText = "One option per line.",
+                                                )
+                                                if (config.options.isNotEmpty()) {
+                                                    Text(
+                                                        "Default choice",
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                    )
+                                                    LazyRow(
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    ) {
+                                                        items(config.options) { option ->
+                                                            FilterChip(
+                                                                selected = config.defaultValue == option,
+                                                                onClick = {
+                                                                    formFieldConfigs =
+                                                                        formFieldConfigs +
+                                                                            (
+                                                                                fieldName to
+                                                                                    config.copy(
+                                                                                        defaultValue = option,
+                                                                                    )
+                                                                            )
+                                                                    value = setFormFieldInlineDefault(
+                                                                        value,
+                                                                        fieldName,
+                                                                        option,
+                                                                    )
+                                                                },
+                                                                label = { Text(option) },
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            else -> {
+                                                FormFieldDefaultEditor(
+                                                    kind = config.kind,
+                                                    value = config.defaultValue,
+                                                    onValueChange = { defaultValue ->
+                                                        formFieldConfigs =
+                                                            formFieldConfigs +
+                                                                (
+                                                                    fieldName to
+                                                                        config.copy(
+                                                                            defaultValue = defaultValue,
+                                                                        )
+                                                                )
+                                                        value = setFormFieldInlineDefault(
+                                                            value,
+                                                            fieldName,
+                                                            defaultValue,
                                                         )
                                                     },
                                                 )
                                             }
                                         }
-
-                                        if (
-                                            config.kind ==
-                                            FormFieldKind.CHOICE
-                                        ) {
-                                            EditableOptionList(
-                                                options =
-                                                    config.options,
-                                                onOptionsChanged = {
-                                                        options ->
-                                                    formFieldConfigs =
-                                                        formFieldConfigs +
-                                                            (
-                                                                fieldName to
-                                                                    config.copy(
-                                                                        options =
-                                                                            options,
-                                                                    )
-                                                                )
-                                                },
-                                                emptyText =
-                                                    "Add the choices for this field.",
-                                            )
-                                        } else {
-                                            OutlinedTextField(
-                                                value =
-                                                    config.defaultValue,
-                                                onValueChange = {
-                                                        defaultValue ->
-                                                    formFieldConfigs =
-                                                        formFieldConfigs +
-                                                            (
-                                                                fieldName to
-                                                                    config.copy(
-                                                                        defaultValue =
-                                                                            defaultValue,
-                                                                    )
-                                                                )
-                                                },
-                                                modifier =
-                                                    Modifier.fillMaxWidth(),
-                                                label = {
-                                                    Text(
-                                                        "Default value (optional)",
-                                                    )
-                                                },
-                                                singleLine =
-                                                    true,
-                                            )
-                                        }
                                     }
                                 }
                             }
-
-                        val preview = formPreview(
-                            value,
-                            formFieldConfigs,
-                        )
-
-                        if (preview.isNotBlank()) {
-                            PreviewCard(value = preview)
-                        }
                     }
 
                     TemplateVariableKind.MATCH -> {
@@ -2738,10 +2739,8 @@ private fun valueFor(
             ""
 
         TemplateVariableKind.RANDOM ->
-            arrayLines(
-                params.optJSONArray(
-                    "choices",
-                ),
+            ChoiceLists.toEditorText(
+                params.opt("choices"),
             )
 
         TemplateVariableKind.CHOICE ->
@@ -2913,48 +2912,29 @@ private fun choiceValuesJson(
         }
     }
 
-private fun formFieldNames(
+private fun mergedFormFieldConfigs(
     layout: String,
-): List<String> =
-    FORM_FIELD_REGEX
-        .findAll(layout)
-        .map {
-            it.groupValues[1]
-        }
+    fields: JSONObject?,
+): Map<String, FormFieldConfig> {
+    val fromJson = parseFormFieldConfigs(fields)
+    val inline = formFieldInlineDefaults(layout)
+    return (formFieldNames(layout) + fromJson.keys)
         .distinct()
-        .toList()
+        .associateWith { name ->
+            val base = fromJson[name] ?: FormFieldConfig()
+            inline[name]?.let { base.copy(defaultValue = it) } ?: base
+        }
+}
 
-private fun formPreview(
-    layout: String,
-    configs: Map<String, FormFieldConfig>,
-): String =
-    FORM_FIELD_REGEX.replace(layout) { match ->
-        val name = match.groupValues[1]
-
-        configs[name]
-            ?.defaultValue
-            ?.takeIf(String::isNotBlank)
-            ?: "<$name>"
-    }
-
-private fun removeFormField(
-    layout: String,
+private fun formFieldToken(
     fieldName: String,
+    defaultValue: String,
 ): String =
-    Regex(
-        """\[\[\s*${Regex.escape(fieldName)}(?:=[^]]*)?\s*]]""",
-    )
-        .replace(
-            layout,
-            "",
-        )
-        .replace(
-            Regex(
-                "\n{3,}",
-            ),
-            "\n\n",
-        )
-        .trim()
+    if (defaultValue.isBlank()) {
+        "[[$fieldName]]"
+    } else {
+        "[[$fieldName=$defaultValue]]"
+    }
 
 private fun parseFormFieldConfigs(
     fields: JSONObject?,
@@ -3063,6 +3043,137 @@ private fun jsonStringList(
         else ->
             emptyList()
     }
+
+@Composable
+private fun FormFieldTypePicker(
+    selected: FormFieldKind,
+    onSelected: (FormFieldKind) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Type: ${selected.label}")
+                Icon(Icons.Default.ExpandMore, contentDescription = null)
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            FormFieldKind.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = {
+                        onSelected(option)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FormFieldDefaultEditor(
+    kind: FormFieldKind,
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    when (kind) {
+        FormFieldKind.DATE -> {
+            OutlinedButton(
+                onClick = {
+                    val calendar = Calendar.getInstance()
+                    parseFormDate(value)?.let { (year, month, day) ->
+                        calendar.set(year, month, day)
+                    }
+                    DatePickerDialog(
+                        context,
+                        { _, year, month, day ->
+                            onValueChange("%04d-%02d-%02d".format(year, month + 1, day))
+                        },
+                        calendar.get(Calendar.YEAR),
+                        calendar.get(Calendar.MONTH),
+                        calendar.get(Calendar.DAY_OF_MONTH),
+                    ).show()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(value.ifBlank { "Pick default date" })
+            }
+        }
+
+        FormFieldKind.TIME -> {
+            OutlinedButton(
+                onClick = {
+                    val calendar = Calendar.getInstance()
+                    parseFormTime(value)?.let { (hour, minute) ->
+                        calendar.set(Calendar.HOUR_OF_DAY, hour)
+                        calendar.set(Calendar.MINUTE, minute)
+                    }
+                    TimePickerDialog(
+                        context,
+                        { _, hour, minute ->
+                            onValueChange("%02d:%02d".format(hour, minute))
+                        },
+                        calendar.get(Calendar.HOUR_OF_DAY),
+                        calendar.get(Calendar.MINUTE),
+                        true,
+                    ).show()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(value.ifBlank { "Pick default time" })
+            }
+        }
+
+        FormFieldKind.MULTILINE -> {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Default text (optional)") },
+                minLines = 2,
+            )
+        }
+
+        else -> {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Default text (optional)") },
+                singleLine = true,
+            )
+        }
+    }
+}
+
+private fun parseFormDate(value: String): Triple<Int, Int, Int>? {
+    val parts = value.trim().split('-')
+    if (parts.size != 3) return null
+    val year = parts[0].toIntOrNull() ?: return null
+    val month = parts[1].toIntOrNull()?.minus(1) ?: return null
+    val day = parts[2].toIntOrNull() ?: return null
+    return Triple(year, month, day)
+}
+
+private fun parseFormTime(value: String): Pair<Int, Int>? {
+    val parts = value.trim().split(':')
+    if (parts.size != 2) return null
+    val hour = parts[0].toIntOrNull() ?: return null
+    val minute = parts[1].toIntOrNull() ?: return null
+    return hour to minute
+}
 
 private fun normalizedFormFieldName(
     value: String,

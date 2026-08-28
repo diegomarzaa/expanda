@@ -8,7 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONArray
 import org.json.JSONObject
 
-class ExpandaDatabase(context: Context) :
+class ExpandaDatabase(private val context: Context) :
     SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
 
     init { setWriteAheadLoggingEnabled(true) }
@@ -33,7 +33,25 @@ class ExpandaDatabase(context: Context) :
             db.execSQL("ALTER TABLE snippets ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
             db.execSQL("UPDATE snippets SET tags = TRIM(folder) WHERE TRIM(folder) <> ''")
         }
-        if (oldVersion < 5) migrateLegacyMatches(db)
+        if (oldVersion < 5) {
+            markPendingTutorialAfterUpgrade()
+            migrateLegacyMatches(db)
+        }
+    }
+
+    /** One-shot flag set when SQLite migrates pre-0.3 snippet storage. */
+    fun consumePendingTutorialAfterUpgrade(): Boolean {
+        val prefs = context.getSharedPreferences(UPGRADE_PREFS, Context.MODE_PRIVATE)
+        val pending = prefs.getBoolean(KEY_PENDING_TUTORIAL_V03, false)
+        if (pending) prefs.edit().remove(KEY_PENDING_TUTORIAL_V03).apply()
+        return pending
+    }
+
+    private fun markPendingTutorialAfterUpgrade() {
+        context.getSharedPreferences(UPGRADE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_PENDING_TUTORIAL_V03, true)
+            .apply()
     }
 
     fun readMatches(): List<TextMatch> = queryMatches(readableDatabase)
@@ -296,7 +314,8 @@ class ExpandaDatabase(context: Context) :
                     add(cursor.string("content"))
                     addAll(cursor.jsonStrings("templates"))
                 }
-                val legacy = TextMatch(
+                val legacy = LegacyTemplateMigrator.migrateMatch(
+                    TextMatch(
                     id = id,
                     triggers = triggers,
                     replacements = replacements,
@@ -322,6 +341,7 @@ class ExpandaDatabase(context: Context) :
                     usageCount = cursor.long("usage_count"),
                     createdAt = cursor.long("created_at", System.currentTimeMillis()),
                     updatedAt = cursor.long("updated_at", System.currentTimeMillis()),
+                    ),
                 )
                 db.insertOrThrow("matches", null, legacy.toValues(includeId = true))
             }
@@ -385,6 +405,8 @@ class ExpandaDatabase(context: Context) :
     companion object {
         private const val DATABASE_NAME = "expanda.db"
         private const val DATABASE_VERSION = 5
+        private const val UPGRADE_PREFS = "expanda_upgrade"
+        private const val KEY_PENDING_TUTORIAL_V03 = "pending_tutorial_v03"
         private const val SEPARATOR = "\u001F"
         private const val MAX_CLIPBOARD_LENGTH = 100_000
 

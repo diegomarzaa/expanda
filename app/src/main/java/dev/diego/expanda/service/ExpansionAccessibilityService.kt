@@ -628,14 +628,10 @@ class ExpansionAccessibilityService : AccessibilityService() {
                 ).apply { bottomMargin = dp(6) },
             )
         }
-        val footer = LinearLayout(this).apply {
-            gravity = Gravity.END
-            setPadding(dp(14), dp(4), dp(14), dp(12))
-            addView(ui.button("Cancel") { hideFormOverlay() })
-        }
+        val footer = overlayCancelFooter(ui) { hideFormOverlay() }
         val bounds = displayBounds(windowManager)
         val maxContentHeight = (bounds.height() * 0.55f).toInt().coerceAtLeast(dp(180))
-        val root = buildScrollableOverlayRoot(content, footer, maxContentHeight, ui.panel(22))
+        val root = buildPickerOverlayRoot(content, footer, candidates.size, maxContentHeight, ui.panel(22), ui)
         val params = overlayDialogParams(windowManager, softInput = false)
         runCatching {
             windowManager.addView(root, params)
@@ -712,14 +708,10 @@ class ExpansionAccessibilityService : AccessibilityService() {
                 bottomMargin = dp(6)
             })
         }
-        val footer = LinearLayout(this).apply {
-            gravity = Gravity.END
-            setPadding(dp(14), dp(4), dp(14), dp(12))
-            addView(ui.button("Cancel") { hideFormOverlay() })
-        }
+        val footer = overlayCancelFooter(ui) { hideFormOverlay() }
         val bounds = displayBounds(windowManager)
         val maxContentHeight = (bounds.height() * 0.55f).toInt().coerceAtLeast(dp(180))
-        val root = buildScrollableOverlayRoot(list, footer, maxContentHeight, ui.panel(22))
+        val root = buildPickerOverlayRoot(list, footer, match.match.replacements.size, maxContentHeight, ui.panel(22), ui)
         val params = overlayDialogParams(windowManager, softInput = false)
         runCatching {
             windowManager.addView(root, params)
@@ -750,11 +742,12 @@ class ExpansionAccessibilityService : AccessibilityService() {
         }
         val valueReaders = linkedMapOf<String, () -> String>()
         var firstTextInput: EditText? = null
+        val formScroll = BoundedScrollView(this, 0)
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(16), dp(20), dp(8))
+            setPadding(dp(20), dp(16), dp(20), dp(12))
             addView(ui.title("Complete snippet").apply {
-                setPadding(0, 0, 0, dp(10))
+                setPadding(0, 0, 0, dp(12))
             })
         }
         var previewIndex = 0
@@ -765,20 +758,17 @@ class ExpansionAccessibilityService : AccessibilityService() {
             if (field.name !in valueReaders) {
                 when (field.inputType) {
                     TemplateFieldInputType.TEXT -> {
-                        val input = ui.input(field.label, field.defaultValue)
+                        val input = ui.input(field.label, field.defaultValue).apply {
+                            hint = ""
+                        }
                         if (!field.multiline) {
                             input.setSingleLine(true)
                             input.maxLines = 1
                         }
                         valueReaders[field.name] = { input.text.toString() }
                         if (firstTextInput == null) firstTextInput = input
-                        panel.addView(
-                            input,
-                            LinearLayout.LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                            ),
-                        )
+                        input.scrollIntoViewWhenFocused(formScroll)
+                        panel.addView(ui.fieldGroup(field.label, input))
                     }
                     TemplateFieldInputType.CHOICE -> {
                         val spinner = ui.spinner(field.options)
@@ -787,13 +777,13 @@ class ExpansionAccessibilityService : AccessibilityService() {
                                 spinner.selectedItem?.toString().orEmpty()
                             }
                         }
-                        panel.addView(spinner)
+                        panel.addView(ui.fieldGroup(field.label, spinner))
                     }
                     TemplateFieldInputType.DATE,
                     TemplateFieldInputType.TIME -> {
                         val button = dateTimeFieldButton(field.inputType, field.label, field.defaultValue, ui)
                         valueReaders[field.name] = { button.text.toString() }
-                        panel.addView(button)
+                        panel.addView(ui.fieldGroup(field.label, button))
                     }
                 }
             } else {
@@ -802,23 +792,21 @@ class ExpansionAccessibilityService : AccessibilityService() {
             previewIndex = maxOf(previewIndex, field.end)
         }
         addPreviewText(panel, rendered.text.substring(previewIndex.coerceAtMost(rendered.text.length)), ui)
-        val footer = LinearLayout(this).apply {
-            gravity = Gravity.END
-            setPadding(dp(20), dp(8), dp(20), dp(14))
-        }
-        footer.addView(ui.button("Cancel") { hideFormOverlay() })
-        footer.addView(ui.button("Insert", primary = true) {
-            val values = valueReaders.mapValues { it.value.invoke() }
-            val completed = rendered.fillFields(values)
-            scheduleFormApply(node, 120L) {
-                applyExpansion(node, originalText, match, completed, packageName, settings)
-            }
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            marginStart = dp(8)
-        })
+        val footer = overlayActionFooter(
+            ui,
+            onCancel = { hideFormOverlay() },
+            onPrimary = {
+                val values = valueReaders.mapValues { it.value.invoke() }
+                val completed = rendered.fillFields(values)
+                scheduleFormApply(node, 120L) {
+                    applyExpansion(node, originalText, match, completed, packageName, settings)
+                }
+            },
+        )
         val bounds = displayBounds(windowManager)
         val maxContentHeight = (bounds.height() * 0.5f).toInt().coerceAtLeast(dp(160))
-        val root = buildScrollableOverlayRoot(panel, footer, maxContentHeight, ui.panel())
+        formScroll.setMaxHeight(maxContentHeight)
+        val root = buildFormOverlayRoot(panel, footer, formScroll, ui.panel(), ui)
         val params = overlayDialogParams(windowManager, softInput = true)
         runCatching {
             windowManager.addView(root, params)
@@ -861,26 +849,22 @@ class ExpansionAccessibilityService : AccessibilityService() {
             })
         }
         field.options.forEachIndexed { index, option ->
-            panel.addView(ui.button(option) {
-                    val completed = rendered.fillFields(
-                        mapOf(field.name to field.optionValues.getOrElse(index) { option }),
-                    )
-                    scheduleFormApply(node, 80L) {
-                        applyExpansion(node, originalText, match, completed, packageName, settings)
-                    }
+            panel.addView(ui.choiceOption(option) {
+                val completed = rendered.fillFields(
+                    mapOf(field.name to field.optionValues.getOrElse(index) { option }),
+                )
+                scheduleFormApply(node, 80L) {
+                    applyExpansion(node, originalText, match, completed, packageName, settings)
+                }
             }, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = dp(5) })
+            ).apply { bottomMargin = dp(6) })
         }
-        val footer = LinearLayout(this).apply {
-            gravity = Gravity.END
-            setPadding(dp(18), dp(4), dp(18), dp(14))
-            addView(ui.button("Cancel") { hideFormOverlay() })
-        }
+        val footer = overlayCancelFooter(ui) { hideFormOverlay() }
         val bounds = displayBounds(windowManager)
         val maxContentHeight = (bounds.height() * 0.55f).toInt().coerceAtLeast(dp(180))
-        val root = buildScrollableOverlayRoot(panel, footer, maxContentHeight, ui.panel())
+        val root = buildPickerOverlayRoot(panel, footer, field.options.size, maxContentHeight, ui.panel(), ui)
         val params = overlayDialogParams(windowManager, softInput = false)
         runCatching {
             windowManager.addView(root, params)
@@ -908,29 +892,167 @@ class ExpansionAccessibilityService : AccessibilityService() {
             }
         }
 
+    private fun overlayCancelFooter(
+        ui: OverlayViews,
+        onCancel: () -> Unit,
+    ): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        setPadding(dp(16), dp(12), dp(16), dp(12))
+        minimumHeight = dp(56)
+        addView(
+            ui.footerButton("Cancel", primary = false, onCancel),
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(48),
+            ),
+        )
+    }
+
+    private fun overlayActionFooter(
+        ui: OverlayViews,
+        primaryLabel: String = "Insert",
+        onCancel: () -> Unit,
+        onPrimary: () -> Unit,
+    ): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        setPadding(dp(16), dp(12), dp(16), dp(12))
+        minimumHeight = dp(56)
+        addView(
+            ui.footerButton("Cancel", primary = false, onCancel),
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(48),
+            ).apply { marginEnd = dp(8) },
+        )
+        addView(
+            ui.footerButton(primaryLabel, primary = true, onPrimary),
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(48),
+            ),
+        )
+    }
+
+    private fun buildOverlayRoot(
+        content: LinearLayout,
+        footer: LinearLayout,
+        background: android.graphics.drawable.Drawable,
+        ui: OverlayViews,
+    ): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        this.background = background
+        addView(
+            content,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        addView(
+            ui.divider(),
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                ui.dp(1),
+            ).apply {
+                topMargin = ui.dp(4)
+                marginStart = ui.dp(16)
+                marginEnd = ui.dp(16)
+            },
+        )
+        addView(
+            footer,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+    }
+
+    private fun buildPickerOverlayRoot(
+        content: LinearLayout,
+        footer: LinearLayout,
+        itemCount: Int,
+        maxContentHeightPx: Int,
+        background: android.graphics.drawable.Drawable,
+        ui: OverlayViews,
+    ): LinearLayout = if (itemCount > 6) {
+        buildScrollableOverlayRoot(content, footer, maxContentHeightPx, background, ui)
+    } else {
+        buildOverlayRoot(content, footer, background, ui)
+    }
+
+    private fun buildFormOverlayRoot(
+        content: LinearLayout,
+        footer: LinearLayout,
+        scroll: BoundedScrollView,
+        background: android.graphics.drawable.Drawable,
+        ui: OverlayViews,
+    ): LinearLayout {
+        scroll.addView(content)
+        attachKeyboardScrollAssist(scroll, content)
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            this.background = background
+            addView(
+                scroll,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            addView(
+                ui.divider(),
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    ui.dp(1),
+                ).apply {
+                    topMargin = ui.dp(4)
+                    marginStart = ui.dp(16)
+                    marginEnd = ui.dp(16)
+                },
+            )
+            addView(
+                footer,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+    }
+
     private fun buildScrollableOverlayRoot(
         content: LinearLayout,
         footer: LinearLayout,
         maxContentHeightPx: Int,
         background: android.graphics.drawable.Drawable,
+        ui: OverlayViews,
     ): LinearLayout {
-        content.setPadding(
-            content.paddingLeft,
-            content.paddingTop,
-            content.paddingRight,
-            content.paddingBottom + dp(220),
-        )
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             this.background = background
         }
         val scroll = BoundedScrollView(this, maxContentHeightPx).apply { addView(content) }
+        attachKeyboardScrollAssist(scroll, content)
         root.addView(
             scroll,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ),
+        )
+        root.addView(
+            ui.divider(),
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                ui.dp(1),
+            ).apply {
+                topMargin = ui.dp(4)
+                marginStart = ui.dp(16)
+                marginEnd = ui.dp(16)
+            },
         )
         root.addView(
             footer,
@@ -942,11 +1064,49 @@ class ExpansionAccessibilityService : AccessibilityService() {
         return root
     }
 
+    private fun attachKeyboardScrollAssist(scroll: BoundedScrollView, content: LinearLayout) {
+        val baseBottomPadding = content.paddingBottom
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            val visible = Rect()
+            scroll.getWindowVisibleDisplayFrame(visible)
+            val screenHeight = scroll.rootView.height
+            val keyboardHeight = (screenHeight - visible.bottom).coerceAtLeast(0)
+            val extra = if (keyboardHeight > screenHeight * 0.12) keyboardHeight else 0
+            val targetBottom = baseBottomPadding + extra
+            if (content.paddingBottom != targetBottom) {
+                content.setPadding(
+                    content.paddingLeft,
+                    content.paddingTop,
+                    content.paddingRight,
+                    targetBottom,
+                )
+            }
+        }
+        scroll.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        scroll.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = Unit
+            override fun onViewDetachedFromWindow(v: View) {
+                scroll.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+            }
+        })
+    }
+
+    private fun EditText.scrollIntoViewWhenFocused(scroll: ScrollView) {
+        setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) return@setOnFocusChangeListener
+            postDelayed({
+                val rect = Rect(0, 0, width, height)
+                requestRectangleOnScreen(rect, false)
+                scroll.post { scroll.smoothScrollTo(0, bottom) }
+            }, 180L)
+        }
+    }
+
     private fun addPreviewText(panel: LinearLayout, value: String, ui: OverlayViews) {
         if (value.isEmpty()) return
-        panel.addView(ui.body(value, 16f).apply {
+        panel.addView(ui.body(value, 14f, secondary = true).apply {
             setTextIsSelectable(false)
-            setPadding(0, dp(3), 0, dp(3))
+            setPadding(0, dp(2), 0, dp(6))
         })
     }
 
@@ -955,12 +1115,14 @@ class ExpansionAccessibilityService : AccessibilityService() {
         label: String,
         defaultValue: String,
         ui: OverlayViews,
-    ): TextView = ui.button(defaultValue.ifBlank {
-        SimpleDateFormat(
-            if (inputType == TemplateFieldInputType.DATE) "yyyy-MM-dd" else "HH:mm",
-            Locale.getDefault(),
-        ).format(Calendar.getInstance().time)
-    }) {}.apply {
+    ): TextView = ui.pickerField(
+        defaultValue.ifBlank {
+            SimpleDateFormat(
+                if (inputType == TemplateFieldInputType.DATE) "yyyy-MM-dd" else "HH:mm",
+                Locale.getDefault(),
+            ).format(Calendar.getInstance().time)
+        },
+    ).apply {
         val calendar = Calendar.getInstance()
         contentDescription = label
         setOnClickListener {

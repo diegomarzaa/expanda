@@ -23,6 +23,8 @@ enum class ColorSchemeMode { WALLPAPER, DEFAULT, CUSTOM }
 data class AppSettings(
     val expansionEnabled: Boolean = true,
     val consentAccepted: Boolean = false,
+    /** User dismissed sideload restricted-settings guidance after trying Accessibility. */
+    val restrictedSettingsHintDismissed: Boolean = false,
     val backgroundSetupAcknowledged: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val colorSchemeMode: ColorSchemeMode = ColorSchemeMode.DEFAULT,
@@ -36,7 +38,7 @@ data class AppSettings(
     val statisticsEnabled: Boolean = true,
     val hapticFeedback: Boolean = false,
     val pasteFallbackEnabled: Boolean = false,
-    val suggestionEnabled: Boolean = false,
+    val suggestionEnabled: Boolean = true,
     val suggestionShowActions: Boolean = true,
     val matchFromBeginning: Boolean = true,
     /** Keep the suggestion list visually dense when enabled. */
@@ -70,6 +72,7 @@ class SettingsRepository(context: Context, scope: CoroutineScope) {
         AppSettings(
             expansionEnabled = values[Keys.ENABLED] ?: true,
             consentAccepted = values[Keys.CONSENT] ?: false,
+            restrictedSettingsHintDismissed = values[Keys.RESTRICTED_SETTINGS_HINT_DISMISSED] ?: false,
             backgroundSetupAcknowledged = values[Keys.BACKGROUND_SETUP_ACKNOWLEDGED] ?: false,
             themeMode = values[Keys.THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
                 ?: ThemeMode.SYSTEM,
@@ -89,7 +92,7 @@ class SettingsRepository(context: Context, scope: CoroutineScope) {
             statisticsEnabled = values[Keys.STATISTICS] ?: true,
             hapticFeedback = values[Keys.HAPTIC] ?: false,
             pasteFallbackEnabled = values[Keys.PASTE_FALLBACK] ?: false,
-            suggestionEnabled = values[Keys.SUGGESTIONS] ?: false,
+            suggestionEnabled = values[Keys.SUGGESTIONS] ?: true,
             suggestionShowActions = values[Keys.SUGGESTION_SHOW_ACTIONS] ?: true,
             matchFromBeginning = values[Keys.MATCH_BEGINNING] ?: true,
             suggestionCompactList = values[Keys.SUGGESTION_COMPACT] ?: true,
@@ -114,6 +117,9 @@ class SettingsRepository(context: Context, scope: CoroutineScope) {
 
     suspend fun setEnabled(enabled: Boolean) = store.edit { it[Keys.ENABLED] = enabled }
     suspend fun acceptConsent() = store.edit { it[Keys.CONSENT] = true }
+    suspend fun dismissRestrictedSettingsHint() = store.edit {
+        it[Keys.RESTRICTED_SETTINGS_HINT_DISMISSED] = true
+    }
     suspend fun acknowledgeBackgroundSetup() = store.edit { it[Keys.BACKGROUND_SETUP_ACKNOWLEDGED] = true }
     suspend fun setTheme(mode: ThemeMode) = store.edit { it[Keys.THEME] = mode.name }
     suspend fun setColorScheme(mode: ColorSchemeMode) = store.edit { it[Keys.COLOR_SCHEME] = mode.name }
@@ -187,6 +193,7 @@ class SettingsRepository(context: Context, scope: CoroutineScope) {
     private object Keys {
         val ENABLED = booleanPreferencesKey("expansion_enabled")
         val CONSENT = booleanPreferencesKey("accessibility_consent")
+        val RESTRICTED_SETTINGS_HINT_DISMISSED = booleanPreferencesKey("restricted_settings_hint_dismissed")
         val BACKGROUND_SETUP_ACKNOWLEDGED = booleanPreferencesKey("background_setup_acknowledged")
         val THEME = stringPreferencesKey("theme")
         val COLOR_SCHEME = stringPreferencesKey("color_scheme")

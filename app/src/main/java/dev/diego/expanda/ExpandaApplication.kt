@@ -34,6 +34,8 @@ class ExpandaApplication : Application() {
     val onboardingStore by lazy { dev.diego.expanda.data.OnboardingStore(this, applicationScope) }
     val actionSettingsStore by lazy { dev.diego.expanda.data.ActionSettingsStore(this) }
 
+    fun consumePendingTutorialAfterUpgrade(): Boolean = database.consumePendingTutorialAfterUpgrade()
+
     override fun onCreate() {
         super.onCreate()
         settingsRepository

@@ -16,6 +16,12 @@ The service ignores fields marked as passwords and stops processing when expansi
 
 Expanda displays an explanation inside the app before it opens Android's Accessibility settings. Android controls the final permission screen, and you can revoke access at any time.
 
+### Restricted settings (Android 13+, sideloaded APKs)
+
+When Expanda is installed outside Google Play (for example from a GitHub release APK), Android treats it as an untrusted install. Accessibility, notification listeners and similar sensitive capabilities stay disabled until the user opens **App info → menu (⋮) → Allow restricted settings** (wording may vary by device language).
+
+This is enforced by Android; the app cannot bypass or auto-grant it. Installs from Google Play are not subject to this extra step in normal circumstances. Expanda detects sideloaded installs and guides you through the flow before opening Accessibility settings.
+
 ## `android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
 
 Some Android manufacturers stop background accessibility services to save battery. Expanda uses this permission to open Android's battery-optimization settings, where you decide whether to allow unrestricted background operation.

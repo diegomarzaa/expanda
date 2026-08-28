@@ -202,6 +202,7 @@ fun ExpandaApp(
     onNewSnippetRequestConsumed: () -> Unit = {},
     onOpenAccessibilitySettings: () -> Unit,
     onOpenBackgroundSettings: () -> Unit,
+    needsRestrictedSettings: Boolean = false,
     onExportJson: () -> Unit,
     onExportCsv: () -> Unit,
     onExportEspanso: () -> Unit,
@@ -398,6 +399,7 @@ fun ExpandaApp(
                     viewModel = viewModel,
                     serviceEnabled = serviceEnabled,
                     openSettings = onOpenAccessibilitySettings,
+                    needsRestrictedSettings = needsRestrictedSettings,
                     showSearch = showSnippetSearch,
                     onHideSearch = { showSnippetSearch = false },
                     selectedIds = selectedSnippetIds,
@@ -492,6 +494,7 @@ fun ExpandaApp(
         onOpenSettings = onOpenBackgroundSettings,
         onConfigured = viewModel::acknowledgeBackgroundSetup,
     ) else if (showDisclosure) AccessibilityDisclosure(
+        needsRestrictedSettings = needsRestrictedSettings,
         onDismiss = { disclosureOverride = false },
         onAccept = {
             viewModel.acceptConsent()
@@ -531,6 +534,7 @@ private fun SnippetList(
     viewModel: MainViewModel,
     serviceEnabled: Boolean,
     openSettings: () -> Unit,
+    needsRestrictedSettings: Boolean,
     showSearch: Boolean,
     onHideSearch: () -> Unit,
     selectedIds: Set<Long>?,
@@ -577,9 +581,19 @@ private fun SnippetList(
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Expansion service is off", fontWeight = FontWeight.SemiBold)
-                    Text("Enable it in Android Accessibility settings.", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        if (needsRestrictedSettings) {
+                            "Enable Expanda in Accessibility settings. If the toggle stays greyed out, " +
+                                "your phone may require Allow restricted settings in App info (⋮ menu)."
+                        } else {
+                            "Enable it in Android Accessibility settings."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
-                Button(onClick = openSettings) { Text("Enable") }
+                Button(onClick = openSettings) {
+                    Text("Enable")
+                }
             }
         }
         if (showSearch) {
@@ -2185,14 +2199,71 @@ private fun BackgroundSetupDialog(
 }
 
 @Composable
-private fun AccessibilityDisclosure(onDismiss: () -> Unit, onAccept: () -> Unit) {
+private fun AccessibilityDisclosure(
+    needsRestrictedSettings: Boolean,
+    onDismiss: () -> Unit,
+    onAccept: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("How text expansion works") },
         text = {
-            Text("Expanda uses Android's Accessibility service to read changes in editable fields, detect shortcuts, and replace them with your snippets. Text is processed on-device and is never sent anywhere. Password fields are ignored. You can disable the service at any time in Android Settings.")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Expanda uses Android's Accessibility service to read changes in editable fields, detect shortcuts, and replace them with your snippets. Text is processed on-device and is never sent anywhere. Password fields are ignored. You can disable the service at any time in Android Settings.")
+                if (needsRestrictedSettings) {
+                    Text(
+                        "This APK was installed outside Google Play. On some phones the Accessibility toggle stays greyed out until you allow restricted settings in App info (⋮ menu). Many installs work without that step — we'll open Accessibility settings next.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         },
-        confirmButton = { Button(onClick = onAccept) { Text("I understand — open Settings") } },
+        confirmButton = { Button(onClick = onAccept) { Text("Continue") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
+    )
+}
+
+@Composable
+fun AccessibilitySetupHelpDialog(
+    onOpenAppInfo: () -> Unit,
+    onOpenAccessibility: () -> Unit,
+    onCantEnable: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Couldn't enable Accessibility?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "If Expanda's toggle is greyed out, open App info, tap the menu (⋮), and look for " +
+                            "\"Allow restricted settings\".",
+                    )
+                    Text(
+                        "That option does not appear on every phone, and many sideloaded installs work without it.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(
+                        onClick = onOpenAppInfo,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Open App info") }
+                    TextButton(
+                        onClick = onOpenAccessibility,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Open Accessibility again") }
+                    TextButton(
+                        onClick = onCantEnable,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("I don't have that option") }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Not now") }
+        },
     )
 }

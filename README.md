@@ -124,6 +124,8 @@ Download the APK from [GitHub Releases](https://github.com/diegomarzaa/expanda/r
 
 Android may ask you to allow installation from your browser or file manager. After installation, open Expanda and follow the in-app explanation before enabling its Accessibility service.
 
+**Android 13+ sideload installs:** if you install the APK from GitHub (not Google Play), Android may block Accessibility until you open App info → menu (⋮) → **Allow restricted settings**. Expanda detects this and shows setup steps in the app. This is an Android security requirement; publishing on Play Store avoids it for most users.
+
 Updates must use an APK signed with the same certificate. Check [APK verification](#apk-verification) if Android rejects an update or you want to verify the file.
 
 ## Permissions and privacy

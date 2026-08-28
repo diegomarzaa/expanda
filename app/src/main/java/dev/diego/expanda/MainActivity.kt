@@ -25,15 +25,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.Button
+import dev.diego.expanda.service.SideloadAccess
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import dev.diego.expanda.data.EspansoSourceFile
 import dev.diego.expanda.service.AccessibilityStatus
 import dev.diego.expanda.ui.ExpandaApp
+import dev.diego.expanda.ui.AccessibilitySetupHelpDialog
 import dev.diego.expanda.ui.ImportKind
 import dev.diego.expanda.ui.MainViewModel
 import dev.diego.expanda.ui.PreparedImport
@@ -73,6 +76,13 @@ class MainActivity : ComponentActivity() {
         val snackbar = remember { SnackbarHostState() }
         var serviceEnabled = remember { androidx.compose.runtime.mutableStateOf(AccessibilityStatus.isEnabled(this)) }
         var backgroundAllowed by remember { mutableStateOf(isBackgroundOperationAllowed()) }
+        val needsRestrictedSettings = SideloadAccess.needsRestrictedSettingsGuidance(
+            this,
+            serviceEnabled.value,
+            state.settings.restrictedSettingsHintDismissed,
+        )
+        var accessibilitySetupPending by remember { mutableStateOf(false) }
+        var showAccessibilitySetupHelp by remember { mutableStateOf(false) }
         var exportKind by remember { mutableStateOf(ExportKind.BACKUP) }
         var exactEspansoExport by remember { mutableStateOf<EspansoSourceFile?>(null) }
         var chooseEspansoExport by remember { mutableStateOf(false) }
@@ -80,6 +90,10 @@ class MainActivity : ComponentActivity() {
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
             serviceEnabled.value = AccessibilityStatus.isEnabled(this)
             backgroundAllowed = isBackgroundOperationAllowed()
+            if (accessibilitySetupPending && !serviceEnabled.value && needsRestrictedSettings) {
+                showAccessibilitySetupHelp = true
+            }
+            accessibilitySetupPending = false
             viewModel.refreshEspansoFolderSilently()
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             val app = application as ExpandaApplication
@@ -168,8 +182,10 @@ class MainActivity : ComponentActivity() {
                 openNewSnippetRequest = openNewSnippetRequest.value,
                 onNewSnippetRequestConsumed = { openNewSnippetRequest.value = false },
                 onOpenAccessibilitySettings = {
+                    accessibilitySetupPending = true
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 },
+                needsRestrictedSettings = needsRestrictedSettings,
                 onOpenBackgroundSettings = ::openBackgroundSettings,
                 onExportJson = { exportKind = ExportKind.BACKUP; exportLauncher.launch("expanda-backup.json") },
                 onExportCsv = { exportKind = ExportKind.CSV; exportLauncher.launch("expanda-matches.csv") },
@@ -193,6 +209,24 @@ class MainActivity : ComponentActivity() {
                 onImport = { importLauncher.launch(arrayOf("*/*")) },
                 onChooseEspansoFolder = { folderLauncher.launch(state.settings.espansoFolderUri?.let(Uri::parse)) },
                 )
+                if (showAccessibilitySetupHelp) {
+                    AccessibilitySetupHelpDialog(
+                        onOpenAppInfo = {
+                            showAccessibilitySetupHelp = false
+                            openAppDetails()
+                        },
+                        onOpenAccessibility = {
+                            showAccessibilitySetupHelp = false
+                            accessibilitySetupPending = true
+                            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        },
+                        onCantEnable = {
+                            showAccessibilitySetupHelp = false
+                            viewModel.dismissRestrictedSettingsHint()
+                        },
+                        onDismiss = { showAccessibilitySetupHelp = false },
+                    )
+                }
                 if (chooseEspansoExport) {
                     AlertDialog(
                         onDismissRequest = { chooseEspansoExport = false },
@@ -316,6 +350,15 @@ class MainActivity : ComponentActivity() {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                 }
             },
+        )
+    }
+
+    private fun openAppDetails() {
+        startActivity(
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:$packageName"),
+            ),
         )
     }
 

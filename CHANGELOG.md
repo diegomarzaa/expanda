@@ -4,6 +4,11 @@ Expanda follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **LegacyTemplateMigrator** converts 0.2 inline tokens (`{FORM:}`, `{DATE:}`, `{CLIPBOARD}`, `{SNIPPET:}`, `{CURSOR}`, etc.) to Espanso variables on upgrade and when legacy syntax is detected in YAML source files.
+- Sideload guidance for Android 13+ **restricted settings** (required before Accessibility can be enabled on APKs installed outside Google Play).
+
 ### Fixed
 
 - `{{form}}` variables now render their full layout (with `[[field]]` placeholders) instead of staying unresolved.

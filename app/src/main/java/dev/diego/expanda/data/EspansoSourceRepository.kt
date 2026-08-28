@@ -78,6 +78,7 @@ class EspansoSourceRepository(
                     }
                     .getOrElse { readInternalFiles() }
             }
+            sourceFiles = migrateLegacySyntaxInFiles(sourceFiles, linked)
             val legacyMatches = matches.matches.value.filter { it.sourceFile == null }
             if (sourceFiles.isEmpty() && legacyMatches.isNotEmpty()) {
                 val migration = EspansoSourceFile(
@@ -635,8 +636,44 @@ class EspansoSourceRepository(
         return normalized.sortedBy(EspansoSourceFile::relativePath)
     }
 
-    private fun migrateLegacyMatches(legacy: List<TextMatch>): List<TextMatch> = legacy.flatMap { match ->
-        val portable = match.copy(
+    private fun migrateLegacySyntaxInFiles(
+        files: List<EspansoSourceFile>,
+        linked: Uri?,
+    ): List<EspansoSourceFile> {
+        var changed = false
+        val migrated = files.map { file ->
+            val decoded = runCatching {
+                EspansoYamlCodec.decode(
+                    file.content.removePrefix("\uFEFF"),
+                    file.relativePath,
+                    importsResolved = true,
+                )
+            }.getOrNull() ?: return@map file
+            val updatedMatches = decoded.matches.map(LegacyTemplateMigrator::migrateMatch)
+            if (updatedMatches == decoded.matches) return@map file
+            changed = true
+            file.copy(
+                content = EspansoYamlCodec.encode(updatedMatches, decoded.globalVariables).yaml,
+            )
+        }
+        if (!changed) return files
+        migrated.forEach { file ->
+            if (linked != null) {
+                EspansoFolderAccess.writeSafely(context, linked, file)
+            }
+        }
+        if (linked == null) replaceInternalDirectory(migrated)
+        val notice = "Converted legacy 0.2 template tokens to Espanso syntax."
+        mutableWorkspace.value = mutableWorkspace.value.copy(
+            issue = mutableWorkspace.value.issue?.let { "$it $notice" } ?: notice,
+        )
+        return migrated
+    }
+
+    private fun migrateLegacyMatches(legacy: List<TextMatch>): List<TextMatch> = legacy
+        .map(LegacyTemplateMigrator::migrateMatch)
+        .flatMap { match ->
+            val portable = match.copy(
             options = match.options.copy(
                 caseSensitive = !match.options.propagateCase,
                 activation = TriggerActivation.IMMEDIATE,
@@ -659,7 +696,7 @@ class EspansoSourceRepository(
             if (literals.isNotEmpty()) add(portable.copy(triggers = literals))
             regex.forEach { trigger -> add(portable.copy(triggers = listOf(trigger))) }
         }
-    }
+        }
 
     private fun merge(
         current: List<EspansoSourceFile>,

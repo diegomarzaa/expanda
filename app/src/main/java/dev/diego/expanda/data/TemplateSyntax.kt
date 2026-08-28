@@ -28,3 +28,53 @@ internal fun isEspansoWord(value: String): Boolean =
 
 /** Espanso form layout placeholders such as `[[name]]` or `[[name=default]]`. */
 internal val FORM_FIELD_PLACEHOLDER = Regex("""\[\[([^]{}]+)]]""")
+
+/** Stricter placeholder matcher with separate name and inline-default capture groups. */
+internal val FORM_FIELD_INLINE = Regex(
+    """\[\[\s*($ESPANSO_WORD_PATTERN)\s*(?:=([^]]*))?\s*]]""",
+)
+
+internal data class FormFieldPlaceholder(
+    val name: String,
+    val inlineDefault: String = "",
+)
+
+internal fun parseFormFieldPlaceholders(layout: String): List<FormFieldPlaceholder> =
+    FORM_FIELD_INLINE.findAll(layout).map { match ->
+        FormFieldPlaceholder(
+            name = match.groupValues[1],
+            inlineDefault = match.groupValues[2].trim(),
+        )
+    }.toList()
+
+internal fun formFieldNames(layout: String): List<String> =
+    parseFormFieldPlaceholders(layout).map(FormFieldPlaceholder::name).distinct()
+
+internal fun formFieldInlineDefaults(layout: String): Map<String, String> =
+    parseFormFieldPlaceholders(layout)
+        .mapNotNull { placeholder ->
+            placeholder.inlineDefault.takeIf(String::isNotBlank)?.let { placeholder.name to it }
+        }
+        .toMap()
+
+internal fun setFormFieldInlineDefault(
+    layout: String,
+    fieldName: String,
+    default: String,
+): String {
+    val token = if (default.isBlank()) "[[$fieldName]]" else "[[$fieldName=$default]]"
+    val pattern = Regex(
+        """\[\[\s*${Regex.escape(fieldName)}\s*(?:=[^]]*)?\s*]]""",
+    )
+    return if (pattern.containsMatchIn(layout)) {
+        pattern.replace(layout, token)
+    } else {
+        layout
+    }
+}
+
+internal fun removeFormFieldPlaceholder(layout: String, fieldName: String): String =
+    Regex("""\[\[\s*${Regex.escape(fieldName)}\s*(?:=[^]]*)?\s*]]""")
+        .replace(layout, "")
+        .replace(Regex("\n{3,}"), "\n\n")
+        .trim()

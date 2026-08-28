@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
 import androidx.core.view.ViewCompat
@@ -63,12 +64,20 @@ class OverlayViews(
         label: String,
         primary: Boolean = false,
         onClick: () -> Unit,
+    ): TextView = footerButton(label, primary, onClick)
+
+    fun footerButton(
+        label: String,
+        primary: Boolean = false,
+        onClick: () -> Unit,
     ): TextView = TextView(context).apply {
         text = label
-        textSize = scaled(14f)
+        textSize = scaled(15f)
         gravity = Gravity.CENTER
+        includeFontPadding = false
         minHeight = dp(48)
-        setPadding(dp(16), dp(10), dp(16), dp(10))
+        minimumHeight = dp(48)
+        setPadding(dp(20), dp(14), dp(20), dp(14))
         setTextColor(if (primary) theme.onPrimary else theme.onSurface)
         background = drawable(
             color = if (primary) theme.primary else theme.surfaceContainerHigh,
@@ -99,6 +108,50 @@ class OverlayViews(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             textCursorDrawable?.setTint(theme.primary)
         }
+    }
+
+    fun fieldGroup(label: String, field: View): LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = dp(10) }
+        addView(
+            body(label, sizeSp = 13f, secondary = true).apply {
+                setPadding(0, 0, 0, dp(4))
+            },
+        )
+        addView(
+            field,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+    }
+
+    fun choiceOption(label: String, onClick: () -> Unit): TextView = body(label).apply {
+        setPadding(dp(14), dp(13), dp(14), dp(13))
+        background = surface()
+        isClickable = true
+        isFocusable = true
+        contentDescription = label
+        foreground = selectableForeground()
+        setOnClickListener { onClick() }
+    }
+
+    fun divider(): View = View(context).apply {
+        setBackgroundColor(withAlpha(theme.outline, 70))
+    }
+
+    fun pickerField(value: String): TextView = body(value, 16f).apply {
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(14), dp(11), dp(14), dp(11))
+        background = surface(12)
+        minHeight = dp(48)
+        isClickable = true
+        isFocusable = true
+        foreground = selectableForeground()
     }
 
     fun spinner(options: List<String>): Spinner = Spinner(context).apply {

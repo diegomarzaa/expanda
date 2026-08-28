@@ -486,7 +486,7 @@ class TemplateRenderer(
     }
 
     private fun randomOutput(params: JSONObject): TokenOutput {
-        val choices = params.strings("choices")
+        val choices = ChoiceLists.parseAny(params.opt("choices"))
         if (choices.isNotEmpty()) return TokenOutput(choices[random.nextInt(choices.size)])
         val length = params.optInt("length", DEFAULT_RANDOM_LENGTH).coerceIn(1, MAX_RANDOM_LENGTH)
         val alphabet = params.string("alphabet").ifBlank { ALPHANUMERIC }

@@ -149,6 +149,14 @@ object ExampleSnippets {
     )
 
     private fun json(vararg values: Pair<String, Any>): String = JSONObject().apply {
-        values.forEach { (key, value) -> put(key, value) }
+        values.forEach { (key, value) ->
+            put(
+                key,
+                when (value) {
+                    is List<*> -> JSONArray(value)
+                    else -> value
+                },
+            )
+        }
     }.toString()
 }
