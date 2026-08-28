@@ -13,7 +13,8 @@ Major release. Rebuilt around Espanso-compatible matches and local-first storage
 - **Espanso-compatible YAML library** — text/regex triggers (word boundaries, `propagate_case`, `case_sensitive`), portable variables.
 - **Source** tab for full text based editing, possibility to save all data to a local folder.
 - **Interactive tutorial** and workspace onboarding (accessibility, suggestions, source editing).
-- **Playground** tab for testing snippets and the suggestion overlaywithout leaving the app.
+- **Playground** tab for testing snippets and the suggestion overlay without leaving the app.
+- **Expansion undo** — press **Backspace** right after expanding to restore the original trigger.
 - **Match disambiguation** when multiple snippets share the same trigger.
 - **Full app backup/restore** (snippets, variables, settings, exclusions, actions).
 - **Suggestion popup** is now resizable and closable with additional optional buttons.

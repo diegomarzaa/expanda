@@ -39,7 +39,7 @@ Expansion uses Android's Accessibility service to read editable fields and repla
 1. Create snippets in the visual editor or paste Espanso YAML in the **Source** tab.
 2. Optionally link a folder that mirrors your desktop Espanso `match/` library.
 3. Enable Expanda's Accessibility service.
-4. Type a shortcut in any app, or pick a match from the suggestion popup.
+4. Type a shortcut in any app, or pick a match from the suggestion popup. Press **Backspace** right after expanding to undo and restore the trigger.
 
 A match looks the same on Android and on Espanso for Windows, macOS, or Linux. Example:
 
@@ -95,7 +95,7 @@ Expanda detects file type by content, so `.yml`, `.yaml`, `.json`, and `.csv` wo
 ## Features
 
 - **Espanso-compatible YAML** — same matches and variables as desktop Espanso; optional `match/` folder sync.
-- **Expand in any app** — type a shortcut or pick from the suggestion popup; exclude apps you do not want.
+- **Expand in any app** — type a shortcut or pick from the suggestion popup; **Backspace** undoes the last expansion; exclude apps you do not want.
 - **Dynamic templates** — forms (`[[field]]`), dates, clipboard, choices, random picks, nested matches, `$|$` cursor.
 - **Regex triggers** — pattern shortcuts with named captures (`{{name}}`) in replacements.
 - **Built-in actions** — formatting, math, selection, deletion, cursor moves, clipboard, Android share.

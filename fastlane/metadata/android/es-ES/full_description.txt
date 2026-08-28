@@ -4,7 +4,7 @@
 
 <p>Funciones:</p>
 <ul>
-  <li>Expansión de texto inmediata o después de un delimitador</li>
+  <li>Expansión de texto inmediata o después de un delimitador; retroceso para deshacer la última expansión</li>
   <li>Varios tags y templates por snippet</li>
   <li>Selección del primer template, aleatoria, secuencial o manual</li>
   <li>Formularios, fechas, horas, portapapeles, snippets anidados y posición del cursor</li>

@@ -4,7 +4,7 @@
 
 <p>Features:</p>
 <ul>
-  <li>Delimiter-based and instant text expansion</li>
+  <li>Delimiter-based and instant text expansion; Backspace undoes the last expansion</li>
   <li>Multiple tags and templates per snippet</li>
   <li>First, random, sequential and manual template selection</li>
   <li>Dynamic forms, dates, times, clipboard text, nested snippets and cursor placement</li>
