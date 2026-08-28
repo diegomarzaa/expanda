@@ -1,0 +1,1 @@
+0.3.0 — Espanso-compatible rebuild: Source tab, Playground, tutorials, backups, legacy migration, improved sideload and form UX.

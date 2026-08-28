@@ -1,0 +1,1 @@
+0.3.0 — Reconstrucción compatible con Espanso: pestaña Source, Playground, tutoriales, copias de seguridad, migración desde 0.2 y mejoras en sideload y formularios.

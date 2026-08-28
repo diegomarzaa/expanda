@@ -28,15 +28,20 @@
 
 ## Why Expanda?
 
-Expanda gives you reusable text without sending what you type to a server. The app has no Internet permission, accounts, ads, analytics or tracking SDKs. Snippet matching and expansion run on your device.
+Expanda is a free, open-source text expander for Android. Snippets stay on your device: no Internet permission, accounts, ads, or analytics.
 
-Expanda uses Android's Accessibility service to detect shortcuts and replace text in other apps. It ignores password fields and shows a clear explanation before opening Android's accessibility settings. Read [Privacy](PRIVACY.md) and [Permissions](PERMISSIONS.md) for the exact behavior.
+**It speaks the same YAML as [Espanso](https://espanso.org/) on your PC.** Write a match once, use it on phone and desktop. Link an Espanso `match/` folder on your phone (local copy, Syncthing, Google Drive, etc.) and edits sync both ways.
+
+Expansion uses Android's Accessibility service to read editable fields and replace shortcuts. Password fields are ignored. The app explains this before opening system settings. See [Privacy](PRIVACY.md) and [Permissions](PERMISSIONS.md).
 
 ## How it works
 
-1. Create a snippet and assign a shortcut such as `;mail`.
-2. Enable Expanda's Accessibility service.
-3. Type the shortcut in an editable field or select it from the suggestion popup.
+1. Create snippets in the visual editor or paste Espanso YAML in the **Source** tab.
+2. Optionally link a folder that mirrors your desktop Espanso `match/` library.
+3. Enable Expanda's Accessibility service.
+4. Type a shortcut in any app, or pick a match from the suggestion popup.
+
+A match looks the same on Android and on Espanso for Windows, macOS, or Linux. Example:
 
 ```yaml
 - trigger: ";meeting"
@@ -58,18 +63,16 @@ Expanda uses Android's Accessibility service to detect shortcuts and replace tex
       params: { format: "%H:%M" }
 ```
 
-You can edit matches in the visual snippet editor or as raw YAML in the **Source** tab.
+`[[name]]` opens a small form when you expand; `{{when}}` and `{{time}}` are filled from date variables. Unsupported desktop-only types (`shell`, `script`, …) stay literal in the output.
 
 ## Import, export and backup
 
-Snippets can live entirely inside the app, or you can link an Espanso `match/` folder for two-way sync.
+- **Folder sync** — point Expanda at an Espanso `match/` tree for two-way editing with desktop Espanso.
+- **YAML import/export** — move compatible matches and variables; Expanda warns about features it cannot translate.
+- **Full backup** — snippets, variables, settings, exclusions, and actions (not clipboard history, logs, or popup position).
+- **CSV** — spreadsheet-friendly export/import for simple snippet lists.
 
-- **Espanso YAML** moves compatible matches and variables between Expanda and Espanso. Expanda reports features it cannot translate.
-- **Snippet source** lets you copy, edit, validate and replace the full library as Expanda YAML. Its AI prompt includes the supported fields, variables and current source.
-- **Full app backup** restores snippets, variables, settings, excluded apps and action configuration. It excludes clipboard history, expansion logs, Android permissions and popup coordinates.
-- **CSV** provides an editable table of snippets for spreadsheets and older Expanda exports.
-
-Expanda reads the selected file by content, so Android can open `.yml`, `.yaml`, `.json` and `.csv` files even when a document provider reports the wrong file type. Full backups and exports contain plain text. Store them somewhere you trust.
+Expanda detects file type by content, so `.yml`, `.yaml`, `.json`, and `.csv` work even when Android reports the wrong MIME type.
 
 ## Screenshots
 
@@ -91,18 +94,14 @@ Expanda reads the selected file by content, so Android can open `.yml`, `.yaml`,
 
 ## Features
 
-- Snippets with unique shortcuts, names, multiple tags and per-app exclusions.
-- Delimiter-based or instant expansion with optional case sensitivity.
-- Multiple templates with first, random, sequential and manual selection modes.
-- Espanso template variables for cursor placement, clipboard text, dates, forms, choices and nested matches.
-- A movable and resizable suggestion popup with configurable matching, height, width, previews and text actions.
-- Built-in actions for text formatting, calculations, selection, deletion, cursor movement, clipboard operations and Android sharing.
-- Search, tag filters and bulk selection for managing snippets.
-- Playground for testing expansions inside the app.
-- Espanso-compatible YAML import/export, optional folder sync, and a dedicated Source tab.
-- Interactive first-run tutorial and optional app-only snippet storage (no folder required).
-- Material themes using wallpaper colors, default colors or a custom color, plus light, dark and AMOLED modes.
-- Adjustable text scale, haptic feedback and a Quick Settings tile.
+- **Espanso-compatible YAML** — same matches and variables as desktop Espanso; optional `match/` folder sync.
+- **Expand in any app** — type a shortcut or pick from the suggestion popup; exclude apps you do not want.
+- **Dynamic templates** — forms (`[[field]]`), dates, clipboard, choices, random picks, nested matches, `$|$` cursor.
+- **Regex triggers** — pattern shortcuts with named captures (`{{name}}`) in replacements.
+- **Built-in actions** — formatting, math, selection, deletion, cursor moves, clipboard, Android share.
+- **Library tools** — tags, search, bulk edit, replacement modes (first / random / sequential / manual); **Source** tab and playground.
+- **Backup & CSV** — full restore or spreadsheet-friendly import/export.
+- **Themes** — light, dark, AMOLED; adjustable text scale; haptic feedback; Quick Settings tile.
 
 ## Template syntax
 
@@ -198,7 +197,7 @@ Release signing uses a local, ignored `signing.properties` file. The repository 
 
 ## Project status
 
-Version `0.3.0-beta` is a major pre-release. It rebuilds Expanda around Espanso-compatible YAML, a new match model, tutorial onboarding, a Playground, a Source tab, and full local backups. Expect breaking changes from `0.2.0` and possible rough edges — bug reports are welcome.
+Version **0.3.0** is the current release. It rebuilds Expanda around Espanso-compatible YAML, a new match model, tutorial onboarding, a Playground, a Source tab, and full local backups. Upgrading from 0.2.0 migrates your snippets automatically; syntax changes are documented in [CHANGELOG.md](CHANGELOG.md).
 
 The project was developed through an AI-assisted workflow. Much of the implementation still needs deeper human review.
 

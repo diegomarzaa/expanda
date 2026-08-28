@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.stateIn
 
 enum class OnboardingStatus { UNINITIALIZED, ACTIVE, COMPLETED, SKIPPED }
 
-/** Tutorial content shipped with 0.3.0-beta; bump when a new walkthrough should replay. */
+/** Tutorial content shipped with 0.3.0; bump when a new walkthrough should replay. */
 const val CURRENT_TUTORIAL_GENERATION = 1
 
 fun initialOnboardingStatus(
