@@ -1,5 +1,6 @@
 package dev.diego.expanda.engine
 
+import dev.diego.expanda.data.FORM_FIELD_PLACEHOLDER
 import dev.diego.expanda.data.TemplateVariable
 import dev.diego.expanda.data.TextMatch
 import dev.diego.expanda.data.TEMPLATE_VARIABLE_REFERENCE_PATTERN
@@ -271,16 +272,19 @@ class TemplateRenderer(
         }
 
         context.variables.firstOrNull { it.name == expression }?.let { variable ->
-            // Espanso form variables produce multiple named values and therefore
-            // require a dotted reference such as {{form.field}}.
-            if (variable.type.equals("form", ignoreCase = true)) return null
+            if (variable.type.equals("form", ignoreCase = true)) {
+                return formLayoutOutput(variable, originalToken, context, depth)
+            }
             return resolveVariable(variable, context, depth)
         }
 
-        return context.expansionMatch
-            ?.namedCaptureGroups
-            ?.get(expression)
-            ?.let { TokenOutput(it.orEmpty()) }
+        context.expansionMatch?.let { expansion ->
+            expansion.namedCaptureGroups[expression]?.let { return TokenOutput(it.orEmpty()) }
+            expression.toIntOrNull()?.let { index ->
+                expansion.capture(index)?.let { return TokenOutput(it.orEmpty()) }
+            }
+        }
+        return null
     }
 
     private fun resolveVariable(
@@ -375,6 +379,72 @@ class TemplateRenderer(
                     ),
                 ),
             )
+        } finally {
+            context.resolvingVariables.remove(variable.name)
+        }
+    }
+
+    private fun formLayoutOutput(
+        variable: TemplateVariable,
+        token: String,
+        context: RenderContext,
+        depth: Int,
+    ): TokenOutput? {
+        if (depth > MAX_REFERENCE_DEPTH || !context.resolvingVariables.add(variable.name)) return null
+        return try {
+            for (dependency in variable.dependsOn) {
+                val dependencyVariable = context.variables.firstOrNull { it.name == dependency } ?: return null
+                if (resolveVariable(dependencyVariable, context, depth + 1) == null) return null
+            }
+
+            val rawParams = parseParams(variable.paramsJson)
+            val params = if (variable.injectVars) {
+                try {
+                    expandParams(rawParams, context, depth + 1)
+                } catch (_: UnresolvedVariableReference) {
+                    return null
+                }
+            } else {
+                rawParams
+            }
+            val layout = params.string("layout")
+            if (layout.isBlank()) return null
+
+            val fieldsJson = params.optJSONObject("fields")
+            val result = StringBuilder()
+            val fields = mutableListOf<TemplateFieldRequest>()
+            var layoutIndex = 0
+
+            FORM_FIELD_PLACEHOLDER.findAll(layout).forEach { match ->
+                result.append(layout, layoutIndex, match.range.first)
+                val expression = match.groupValues[1].trim()
+                val fieldName = expression.substringBefore('=').trim()
+                if (fieldName.isBlank()) {
+                    layoutIndex = match.range.last + 1
+                    return@forEach
+                }
+                val inlineDefault = expression.substringAfter('=', "").trim()
+                val definition = fieldsJson?.optJSONObject(fieldName)
+                val defaultValue = inlineDefault.ifBlank { fieldDefault(definition) }
+                val label = "${variable.name}.$fieldName"
+                val start = result.length
+                result.append(defaultValue)
+                fields += TemplateFieldRequest(
+                    name = stableFieldName(label),
+                    label = label,
+                    token = token,
+                    defaultValue = defaultValue,
+                    start = start,
+                    end = result.length,
+                    occurrence = fields.count { it.label == label },
+                    inputType = fieldInputType(definition),
+                    options = definition?.strings("values").orEmpty(),
+                    multiline = definition?.optBoolean("multiline") == true,
+                )
+                layoutIndex = match.range.last + 1
+            }
+            result.append(layout, layoutIndex, layout.length)
+            TokenOutput(text = result.toString(), fields = fields)
         } finally {
             context.resolvingVariables.remove(variable.name)
         }

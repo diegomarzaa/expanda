@@ -30,7 +30,7 @@ Expanda uses this permission for optional haptic feedback after an expansion. Ha
 
 Modern Android versions expose clipboard access through the system API rather than a manifest permission. Expanda uses it for:
 
-- The `{CLIPBOARD}` template token.
+- The `{{clipboard}}` template variable.
 - Enabled clipboard actions.
 - Optional local clipboard history.
 - An optional compatibility fallback for editors that reject direct replacement.

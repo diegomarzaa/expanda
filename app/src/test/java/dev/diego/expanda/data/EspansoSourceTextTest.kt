@@ -82,8 +82,14 @@ class EspansoSourceTextTest {
         )
     }
 
-    @Test fun `comments and block scalars require source editing while plain items stay visual`() {
-        assertEquals(SourceEditMode.SOURCE_ONLY, EspansoSourceText.visualEditMode(source, 0))
+    @Test fun `block scalars stay visual and inline yaml comments require source`() {
+        assertEquals(SourceEditMode.VISUAL, EspansoSourceText.visualEditMode(source, 0))
         assertEquals(SourceEditMode.VISUAL, EspansoSourceText.visualEditMode(source, 1))
+
+        val commented = source.replace(
+            """- trigger: ";one"""",
+            """- trigger: ";one"  # keep exact casing""",
+        )
+        assertEquals(SourceEditMode.SOURCE_ONLY, EspansoSourceText.visualEditMode(commented, 0))
     }
 }

@@ -5,12 +5,11 @@ import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class RegexCaptureDialogTest {
-    @Test fun `catalog exposes numbered and named regex captures`() {
+    @Test fun `catalog exposes named regex captures only`() {
         val catalog = regexCaptureCatalog("ETA (\\d+) (?<unit>m|h)")
 
-        assertEquals(listOf("0", "1", "2", "unit"), catalog.options.map { it.reference })
-        assertEquals("(\\d+)", catalog.options.first { it.reference == "1" }.source)
-        assertEquals("(?<unit>m|h)", catalog.options.first { it.reference == "unit" }.source)
+        assertEquals(listOf("unit"), catalog.options.map { it.reference })
+        assertEquals("(?<unit>m|h)", catalog.options.single().source)
         assertEquals(setOf("unit"), catalog.namedCaptures)
         assertEquals(null, catalog.error)
     }

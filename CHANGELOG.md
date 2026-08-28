@@ -4,6 +4,14 @@ Expanda follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `{{form}}` variables now render their full layout (with `[[field]]` placeholders) instead of staying unresolved.
+- Regex replacements can reference numeric capture groups (`{{0}}`, `{{1}}`, …) in addition to named groups.
+
+### Changed
+
+- Unit tests and docs aligned with Espanso-only template syntax (removed legacy `{CURSOR}`, `{FORM:}`, etc.).
 ## [0.3.0-beta]: https://github.com/diegomarzaa/expanda/releases/tag/v0.3.0-beta
 
 Major pre-release. Rebuilt around Espanso-compatible matches, a new data model, and a full onboarding/tutorial flow. **Not a drop-in upgrade from 0.2.0** — legacy snippets are migrated on first launch.
@@ -35,13 +43,13 @@ Major pre-release. Rebuilt around Espanso-compatible matches, a new data model, 
 
 ### Fixed
 
-- `{CLIPBOARD}` / `;clip` returning stale clipboard content in other apps.
+- Clipboard variable (`{{clipboard}}`) / `;clip` returning stale clipboard content in other apps.
 - `propagate_case` default capitalization (first letter, per Espanso — not ALL CAPS).
 - `case_sensitive` triggers now work on Android (no longer marked desktop-only).
 - Case-matching UI: toggling one option auto-adjusts the other; no confusing save errors.
 - Back from Source (opened via a non-visual snippet) returns to the previous tab instead of exiting the app.
 - Form/choice overlays: Cancel and Insert stay visible; content scrolls above the keyboard.
-- Popup resize anchoring, Playground keyboard dismiss, empty Playground browse inserts, `{CURSOR}` in nested snippets.
+- Popup resize anchoring, Playground keyboard dismiss, empty Playground browse inserts, `$|$` cursor in nested matches.
 - Broader CSV/JSON/YAML file picking despite wrong MIME types from document providers.
 
 ## [0.2.0](https://github.com/diegomarzaa/expanda/releases/tag/v0.2.0) - 2026-08-20

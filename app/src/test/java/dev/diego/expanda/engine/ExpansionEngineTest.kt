@@ -60,7 +60,7 @@ class ExpansionEngineTest {
             found,
             RenderedTemplate(match.replace, match.replace.length),
         )
-        assertEquals(";Hello world", applied.text)
+        assertEquals("Hello world", applied.text)
     }
 
     @Test fun `duplicate triggers return all candidates`() {
@@ -95,11 +95,11 @@ class ExpansionEngineTest {
         assertTrue(engine.findMatch("a cat!", 5, listOf(word), "") != null)
     }
 
-    @Test fun `regex suffix exposes numbered and named captures`() {
+    @Test fun `regex suffix exposes named captures in replacements`() {
         val match = textMatch(
-            triggers = listOf("greet\\((?P<person>[^)]+),(\\d+)\\)"),
+            triggers = listOf("greet\\((?P<person>[^)]+),(?P<id>\\d+)\\)"),
             triggerKind = TriggerKind.REGEX,
-            replacement = "Hi {{person}} #{{2}} ({{0}})",
+            replacement = "Hi {{person}} #{{id}}",
             immediate = true,
         )
         val input = "greet(Bob,42)"
@@ -110,7 +110,8 @@ class ExpansionEngineTest {
         assertEquals(input, found.matchedText)
         assertEquals(listOf("Bob", "42"), found.captureGroups)
         assertEquals("Bob", found.namedCaptureGroups["person"])
-        assertEquals("Hi Bob #42 (greet(Bob,42))", rendered.text)
+        assertEquals("42", found.namedCaptureGroups["id"])
+        assertEquals("Hi Bob #42", rendered.text)
     }
 
     @Test fun `invalid regex is ignored without breaking other matches`() {

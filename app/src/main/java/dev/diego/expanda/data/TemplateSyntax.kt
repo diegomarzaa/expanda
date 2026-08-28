@@ -25,3 +25,6 @@ internal fun referencedVariableNames(template: String): Set<String> =
 
 internal fun isEspansoWord(value: String): Boolean =
     value.isNotEmpty() && ESPANSO_WORD.matches(value)
+
+/** Espanso form layout placeholders such as `[[name]]` or `[[name=default]]`. */
+internal val FORM_FIELD_PLACEHOLDER = Regex("""\[\[([^]{}]+)]]""")

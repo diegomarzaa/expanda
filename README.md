@@ -38,16 +38,27 @@ Expanda uses Android's Accessibility service to detect shortcuts and replace tex
 2. Enable Expanda's Accessibility service.
 3. Type the shortcut in an editable field or select it from the suggestion popup.
 
-```text
-Shortcut: ;meeting
+```yaml
+- trigger: ";meeting"
+  replace: |
+    Hi {{details.name}},
 
-Template:
-Hi {FORM: NAME},
-
-Can we meet on {DATE:+1:DAY:EEEE} at {TIME:HH:mm}?
-
-{CURSOR}
+    Can we meet on {{when}} at {{time}}?
+    $|$
+  vars:
+    - name: details
+      type: form
+      params:
+        layout: "[[name]]"
+    - name: when
+      type: date
+      params: { format: "%A", offset: 86400 }
+    - name: time
+      type: date
+      params: { format: "%H:%M" }
 ```
+
+You can edit matches in the visual snippet editor or as raw YAML in the **Source** tab.
 
 ## Import, export and backup
 
@@ -83,7 +94,7 @@ Expanda reads the selected file by content, so Android can open `.yml`, `.yaml`,
 - Snippets with unique shortcuts, names, multiple tags and per-app exclusions.
 - Delimiter-based or instant expansion with optional case sensitivity.
 - Multiple templates with first, random, sequential and manual selection modes.
-- Dynamic tokens for cursor placement, clipboard text, dates, times, forms and nested snippets.
+- Espanso template variables for cursor placement, clipboard text, dates, forms, choices and nested matches.
 - A movable and resizable suggestion popup with configurable matching, height, width, previews and text actions.
 - Built-in actions for text formatting, calculations, selection, deletion, cursor movement, clipboard operations and Android sharing.
 - Search, tag filters and bulk selection for managing snippets.
@@ -93,16 +104,19 @@ Expanda reads the selected file by content, so Android can open `.yml`, `.yaml`,
 - Material themes using wallpaper colors, default colors or a custom color, plus light, dark and AMOLED modes.
 - Adjustable text scale, haptic feedback and a Quick Settings tile.
 
-## Dynamic tokens
+## Template syntax
 
-| Token | Result |
+Expanda follows [Espanso](https://espanso.org/) template syntax. Single braces are always literal text.
+
+| Syntax | Result |
 |---|---|
-| `{CURSOR}` | Places the cursor at this position after expansion |
-| `{CLIPBOARD}` | Inserts the current clipboard text |
-| `{DATE:yyyy-MM-dd}` | Inserts a formatted date |
-| `{TIME:HH:mm}` | Inserts a formatted time |
-| `{FORM: NAME}` | Asks for a value when you use the snippet |
-| `{SNIPPET: shortcut}` | Inserts another snippet |
+| `{{variable}}` | Resolves a portable variable (`echo`, `date`, `random`, `clipboard`, `choice`, `form`, `match`) |
+| `{{form.field}}` | Inserts one field from a `type: form` variable |
+| `[[field]]` / `[[field=default]]` | Form layout placeholder inside a form variable's `layout` |
+| `$|$` | Places the cursor here after expansion |
+| `{{capture}}` | Named regex capture from `(?<capture>...)` in a regex trigger |
+
+Unsupported desktop variable types (for example `shell` or `script`) stay unresolved in the output so Android never silently changes their meaning.
 
 ## Download and install
 

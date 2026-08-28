@@ -25,7 +25,7 @@ Expanda stores no account, advertising identifier or remote analytics identifier
 
 ## Clipboard access
 
-Expanda can read clipboard text for the `{CLIPBOARD}` token, clipboard actions and the optional clipboard history. The history captures the current clipboard when Expanda returns to the foreground. It remains in the local database until you clear the history in Settings or clear the app's storage.
+Expanda can read clipboard text for the `{{clipboard}}` variable, clipboard actions and the optional clipboard history. The history captures the current clipboard when Expanda returns to the foreground. It remains in the local database until you clear the history in Settings or clear the app's storage.
 
 The optional compatibility paste fallback uses the system clipboard when an editor rejects direct text replacement. It restores the previous clipboard content after the operation where Android permits it.
 
