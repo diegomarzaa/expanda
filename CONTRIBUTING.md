@@ -35,4 +35,4 @@ Do not add trackers, advertising SDKs or non-free dependencies without prior dis
 
 Expanda began through an AI-assisted, vibe-coding workflow. Review the surrounding implementation before extending it and call out generated code in a pull request when that context helps reviewers assess the change.
 
-By contributing, you agree that your work will be released under the repository's [MIT License](LICENSE).
+By contributing, you agree that your work will be released under the repository's [GPLv3 License](LICENSE).
