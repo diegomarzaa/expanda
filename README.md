@@ -7,7 +7,7 @@
   <p>
     <a href="https://github.com/diegomarzaa/expanda/releases/latest"><img src="https://img.shields.io/github/v/release/diegomarzaa/expanda?label=Download&amp;logo=github" alt="Latest release"></a>
     <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22dev.diego.expanda%22%2C%22url%22%3A%2F%2Fgithub.com%2Fdiegomarzaa%2Fexpanda%22%2C%22author%22%3A%22diegomarzaa%22%2C%22name%22%3A%22Expanda%22%7D"><img src="https://img.shields.io/badge/Get_it_on-Obtainium-2f80ed" alt="Get Expanda on Obtainium"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2ea44f.svg" alt="MIT License"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-2ea44f.svg" alt="GPLv3 License"></a>
     <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&amp;logoColor=white" alt="Android 8.0 or newer">
     <img src="https://img.shields.io/badge/Internet_permission-none-5c6bc0" alt="No Internet permission">
     <img src="https://img.shields.io/badge/Ads_%26_analytics-none-5c6bc0" alt="No ads or analytics">
@@ -49,6 +49,17 @@ Can we meet on {DATE:+1:DAY:EEEE} at {TIME:HH:mm}?
 {CURSOR}
 ```
 
+## Import, export and backup
+
+Snippets can live entirely inside the app, or you can link an Espanso `match/` folder for two-way sync.
+
+- **Espanso YAML** moves compatible matches and variables between Expanda and Espanso. Expanda reports features it cannot translate.
+- **Snippet source** lets you copy, edit, validate and replace the full library as Expanda YAML. Its AI prompt includes the supported fields, variables and current source.
+- **Full app backup** restores snippets, variables, settings, excluded apps and action configuration. It excludes clipboard history, expansion logs, Android permissions and popup coordinates.
+- **CSV** provides an editable table of snippets for spreadsheets and older Expanda exports.
+
+Expanda reads the selected file by content, so Android can open `.yml`, `.yaml`, `.json` and `.csv` files even when a document provider reports the wrong file type. Full backups and exports contain plain text. Store them somewhere you trust.
+
 ## Screenshots
 
 <table>
@@ -73,14 +84,14 @@ Can we meet on {DATE:+1:DAY:EEEE} at {TIME:HH:mm}?
 - Delimiter-based or instant expansion with optional case sensitivity.
 - Multiple templates with first, random, sequential and manual selection modes.
 - Dynamic tokens for cursor placement, clipboard text, dates, times, forms and nested snippets.
-- A movable suggestion popup with configurable matching, height, previews and text actions.
+- A movable and resizable suggestion popup with configurable matching, height, width, previews and text actions.
 - Built-in actions for text formatting, calculations, selection, deletion, cursor movement, clipboard operations and Android sharing.
 - Search, tag filters and bulk selection for managing snippets.
-- Optional local clipboard history with pinning and deletion controls.
-- Local usage statistics that you can disable.
-- JSON backup and CSV import/export.
+- Playground for testing expansions inside the app.
+- Espanso-compatible YAML import/export, optional folder sync, and a dedicated Source tab.
+- Interactive first-run tutorial and optional app-only snippet storage (no folder required).
 - Material themes using wallpaper colors, default colors or a custom color, plus light, dark and AMOLED modes.
-- Configurable text size, haptic feedback and a Quick Settings tile.
+- Adjustable text scale, haptic feedback and a Quick Settings tile.
 
 ## Dynamic tokens
 
@@ -171,9 +182,9 @@ Release signing uses a local, ignored `signing.properties` file. The repository 
 
 ## Project status
 
-Version `0.2.0` is the first stable public release. It covers the complete text-expansion workflow and has been tested through daily use and local automated checks.
+Version `0.3.0-beta` is a major pre-release. It rebuilds Expanda around Espanso-compatible YAML, a new match model, tutorial onboarding, a Playground, a Source tab, and full local backups. Expect breaking changes from `0.2.0` and possible rough edges — bug reports are welcome.
 
-The project was developed through an AI-assisted, vibe-coding workflow. Much of the generated implementation still needs deeper human review. Contributions that simplify the code, improve compatibility or strengthen privacy and testing are welcome.
+The project was developed through an AI-assisted workflow. Much of the implementation still needs deeper human review.
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and [SECURITY.md](SECURITY.md) for private vulnerability reports.
 
@@ -189,4 +200,4 @@ Bug reports, documentation improvements and pull requests are welcome. Read [CON
 
 ## License
 
-Expanda is free software released under the [MIT License](LICENSE). You may use, copy, modify, distribute and sell copies under the terms of that license.
+Expanda 0.3.0 and later are free software under [GNU GPLv3](LICENSE). If you distribute a modified build, you must provide its corresponding source under the same license. The published 0.2.0 release remains available under MIT because changing the license cannot revoke permissions already granted for that version.

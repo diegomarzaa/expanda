@@ -4,6 +4,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.Normalizer
 import java.util.Locale
+import java.util.UUID
 
 enum class ActionCategory { NUMBER, TEXT, SELECTION, DELETION, CURSOR, CLIPBOARD, ANDROID, EXPANDA }
 
@@ -14,6 +15,8 @@ data class ActionDefinition(
     val category: ActionCategory,
     val description: String,
     val enabledByDefault: Boolean = false,
+    /** Can run from Android's PROCESS_TEXT menu with only the selected text. */
+    val supportsSelectedText: Boolean = false,
 )
 
 data class ActionContext(
@@ -41,6 +44,28 @@ data class ActionOutcome(
 
 /** Executes opt-in typing actions without depending on Android UI classes. */
 class ActionEngine {
+    /** Runs the same pure transformation used by typing actions on an Android text selection. */
+    fun processSelectedText(actionId: String, text: String): String? = when (actionId) {
+        "math_replace" -> calculate(text, append = false)
+        "math_append" -> calculate(text, append = true)
+        "number_space" -> formatNumbers(text, ' ', ',')
+        "number_period" -> formatNumbers(text, '.', ',')
+        "number_comma" -> formatNumbers(text, ',', '.')
+        "remove_diacritics" -> removeDiacritics(text)
+        "uppercase" -> text.uppercase(Locale.getDefault())
+        "lowercase" -> text.lowercase(Locale.getDefault())
+        "sentence_case" -> sentenceCase(text)
+        "title_case" -> titleCase(text)
+        "space_underscore" -> text.replace(' ', '_')
+        "space_dash" -> text.replace(' ', '-')
+        "underscore_space" -> text.replace('_', ' ')
+        "dash_space" -> text.replace('-', ' ')
+        "uuid" -> UUID.randomUUID().toString()
+        "trim_spaces" -> text.trim()
+        "delete_blank_lines" -> text.lineSequence().filterNot(String::isBlank).joinToString("\n")
+        else -> null
+    }
+
     fun execute(
         context: ActionContext,
         enabledActionIds: Set<String> = definitions.mapTo(linkedSetOf()) { it.id },
@@ -81,20 +106,12 @@ class ActionEngine {
         }
 
         return when (definition.id) {
-            "math_replace" -> calculate(withoutCommand, append = false)?.let { outcome(it, it.length) }
-            "math_append" -> calculate(withoutCommand, append = true)?.let { outcome(it, it.length) }
-            "number_space" -> replaceAll { formatNumbers(it, ' ', ',') }
-            "number_period" -> replaceAll { formatNumbers(it, '.', ',') }
-            "number_comma" -> replaceAll { formatNumbers(it, ',', '.') }
-            "remove_diacritics" -> replaceAll(::removeDiacritics)
-            "uppercase" -> replaceAll { it.uppercase(Locale.getDefault()) }
-            "lowercase" -> replaceAll { it.lowercase(Locale.getDefault()) }
-            "sentence_case" -> replaceAll(::sentenceCase)
-            "title_case" -> replaceAll(::titleCase)
-            "space_underscore" -> replaceAll { it.replace(' ', '_') }
-            "space_dash" -> replaceAll { it.replace(' ', '-') }
-            "underscore_space" -> replaceAll { it.replace('_', ' ') }
-            "dash_space" -> replaceAll { it.replace('-', ' ') }
+            "math_replace", "math_append" -> processSelectedText(definition.id, withoutCommand)
+                ?.let { outcome(it, it.length) }
+            "number_space", "number_period", "number_comma", "remove_diacritics",
+            "uppercase", "lowercase", "sentence_case", "title_case",
+            "space_underscore", "space_dash", "underscore_space", "dash_space" ->
+                replaceAll { processSelectedText(definition.id, it) ?: it }
             "select_all" -> outcome(start = 0, end = withoutCommand.length)
             "select_before" -> outcome(start = 0, end = baseCursor.coerceAtMost(withoutCommand.length))
             "select_after" -> outcome(start = baseCursor.coerceAtMost(withoutCommand.length), end = withoutCommand.length)
@@ -107,10 +124,10 @@ class ActionEngine {
                 val text = withoutCommand.substring(0, baseCursor.coerceAtMost(withoutCommand.length))
                 outcome(text, text.length)
             }
-            "trim_spaces" -> replaceAll(String::trim)
-            "delete_blank_lines" -> replaceAll { source ->
-                source.lineSequence().filterNot(String::isBlank).joinToString("\n")
-            }
+            "trim_spaces", "delete_blank_lines" ->
+                replaceAll { processSelectedText(definition.id, it) ?: it }
+            "uuid" -> processSelectedText(definition.id, withoutCommand)
+                ?.let { outcome(it, it.length) }
             "cursor_start" -> outcome(start = 0)
             "cursor_end" -> outcome(start = withoutCommand.length)
             "copy_all" -> outcome(request = ActionRequest.Copy(withoutCommand))
@@ -182,28 +199,29 @@ class ActionEngine {
 
     companion object {
         val definitions: List<ActionDefinition> = listOf(
-            ActionDefinition("math_append", ",==", "Append calculation result", ActionCategory.NUMBER, "Keep the expression and append its result"),
-            ActionDefinition("math_replace", "==", "Calculate expression", ActionCategory.NUMBER, "Replace the last math expression with its result"),
-            ActionDefinition("number_space", ",nfs", "Space thousands", ActionCategory.NUMBER, "12 345,67"),
-            ActionDefinition("number_period", ",nfp", "Period thousands", ActionCategory.NUMBER, "12.345,67"),
-            ActionDefinition("number_comma", ",nfc", "Comma thousands", ActionCategory.NUMBER, "12,345.67"),
-            ActionDefinition("remove_diacritics", ",rd", "Remove diacritics", ActionCategory.TEXT, "Convert áéñ to aen"),
-            ActionDefinition("uppercase", ",uu", "Uppercase", ActionCategory.TEXT, "Convert all text to uppercase"),
-            ActionDefinition("lowercase", ",ll", "Lowercase", ActionCategory.TEXT, "Convert all text to lowercase"),
-            ActionDefinition("sentence_case", ",ss", "Sentence case", ActionCategory.TEXT, "Capitalize each sentence"),
-            ActionDefinition("title_case", ",ww", "Capitalize words", ActionCategory.TEXT, "Capitalize the first letter of every word"),
-            ActionDefinition("space_underscore", ",su", "Spaces to underscores", ActionCategory.TEXT, "Replace spaces with underscores"),
-            ActionDefinition("space_dash", ",sd", "Spaces to dashes", ActionCategory.TEXT, "Replace spaces with dashes"),
-            ActionDefinition("underscore_space", ",us", "Underscores to spaces", ActionCategory.TEXT, "Replace underscores with spaces"),
-            ActionDefinition("dash_space", ",ds", "Dashes to spaces", ActionCategory.TEXT, "Replace dashes with spaces"),
+            ActionDefinition("math_append", ",==", "Append calculation result", ActionCategory.NUMBER, "Keep the expression and append its result", supportsSelectedText = true),
+            ActionDefinition("math_replace", "==", "Calculate expression", ActionCategory.NUMBER, "Replace the last math expression with its result", supportsSelectedText = true),
+            ActionDefinition("number_space", ",nfs", "Space thousands", ActionCategory.NUMBER, "12 345,67", supportsSelectedText = true),
+            ActionDefinition("number_period", ",nfp", "Period thousands", ActionCategory.NUMBER, "12.345,67", supportsSelectedText = true),
+            ActionDefinition("number_comma", ",nfc", "Comma thousands", ActionCategory.NUMBER, "12,345.67", supportsSelectedText = true),
+            ActionDefinition("remove_diacritics", ",rd", "Remove diacritics", ActionCategory.TEXT, "Convert áéñ to aen", supportsSelectedText = true),
+            ActionDefinition("uppercase", ",uu", "Uppercase", ActionCategory.TEXT, "Convert all text to uppercase", supportsSelectedText = true),
+            ActionDefinition("lowercase", ",ll", "Lowercase", ActionCategory.TEXT, "Convert all text to lowercase", supportsSelectedText = true),
+            ActionDefinition("sentence_case", ",ss", "Sentence case", ActionCategory.TEXT, "Capitalize each sentence", supportsSelectedText = true),
+            ActionDefinition("title_case", ",ww", "Capitalize words", ActionCategory.TEXT, "Capitalize the first letter of every word", supportsSelectedText = true),
+            ActionDefinition("space_underscore", ",su", "Spaces to underscores", ActionCategory.TEXT, "Replace spaces with underscores", supportsSelectedText = true),
+            ActionDefinition("space_dash", ",sd", "Spaces to dashes", ActionCategory.TEXT, "Replace spaces with dashes", supportsSelectedText = true),
+            ActionDefinition("underscore_space", ",us", "Underscores to spaces", ActionCategory.TEXT, "Replace underscores with spaces", supportsSelectedText = true),
+            ActionDefinition("dash_space", ",ds", "Dashes to spaces", ActionCategory.TEXT, "Replace dashes with spaces", supportsSelectedText = true),
+            ActionDefinition("uuid", ",uuid", "Generate UUID", ActionCategory.TEXT, "Replace the current text or selection with a UUID", supportsSelectedText = true),
             ActionDefinition("select_all", ",aa", "Select all", ActionCategory.SELECTION, "Select all remaining text"),
             ActionDefinition("select_before", ",sb", "Select before cursor", ActionCategory.SELECTION, "Select from the start to the cursor"),
             ActionDefinition("select_after", ",sa", "Select after cursor", ActionCategory.SELECTION, "Select from the cursor to the end"),
             ActionDefinition("delete_all", ",dd", "Delete all", ActionCategory.DELETION, "Delete all text"),
             ActionDefinition("delete_before", ",db", "Delete before cursor", ActionCategory.DELETION, "Delete from the start to the cursor"),
             ActionDefinition("delete_after", ",da", "Delete after cursor", ActionCategory.DELETION, "Delete from the cursor to the end"),
-            ActionDefinition("trim_spaces", ",ts", "Trim spaces", ActionCategory.DELETION, "Delete leading and trailing spaces"),
-            ActionDefinition("delete_blank_lines", ",ka", "Delete blank lines", ActionCategory.DELETION, "Remove empty lines"),
+            ActionDefinition("trim_spaces", ",ts", "Trim spaces", ActionCategory.DELETION, "Delete leading and trailing spaces", supportsSelectedText = true),
+            ActionDefinition("delete_blank_lines", ",ka", "Delete blank lines", ActionCategory.DELETION, "Remove empty lines", supportsSelectedText = true),
             ActionDefinition("cursor_start", ",cs", "Cursor to start", ActionCategory.CURSOR, "Place the cursor at the start"),
             ActionDefinition("cursor_end", ",ce", "Cursor to end", ActionCategory.CURSOR, "Place the cursor at the end"),
             ActionDefinition("copy_all", ",cc", "Copy all", ActionCategory.CLIPBOARD, "Copy all text"),

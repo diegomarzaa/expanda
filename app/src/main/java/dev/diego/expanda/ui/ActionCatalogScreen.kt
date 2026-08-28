@@ -137,7 +137,18 @@ private fun ActionRow(
     ListItem(
         overlineContent = { Text(shortcut, fontFamily = FontFamily.Monospace) },
         headlineContent = { Text(definition.title) },
-        supportingContent = { Text(definition.description) },
+        supportingContent = {
+            Column {
+                Text(definition.description)
+                if (definition.supportsSelectedText) {
+                    Text(
+                        "Also available from Android's selected-text menu",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+        },
         trailingContent = {
             Row {
                 IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, "Edit shortcut") }

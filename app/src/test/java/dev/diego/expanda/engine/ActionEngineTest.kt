@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.util.UUID
 
 class ActionEngineTest {
     private val engine = ActionEngine()
@@ -63,5 +64,30 @@ class ActionEngineTest {
 
     @Test fun `typing actions are declared opt in by default`() {
         assertEquals(true, ActionEngine.definitions.all { !it.enabledByDefault })
+    }
+
+    @Test fun `selected text actions reuse the canonical transformations`() {
+        assertEquals("AE N", engine.processSelectedText("uppercase", "áé ñ")?.let {
+            engine.processSelectedText("remove_diacritics", it)
+        })
+        assertEquals("12.345,67", engine.processSelectedText("number_period", "12345.67"))
+        assertEquals("2+3 = 5", engine.processSelectedText("math_append", "2+3"))
+        assertNull(engine.processSelectedText("cursor_start", "hello"))
+    }
+
+    @Test fun `only context free actions are exposed to Android selected text`() {
+        val exposed = ActionEngine.definitions.filter { it.supportsSelectedText }.map { it.id }.toSet()
+        assertEquals(true, "uppercase" in exposed)
+        assertEquals(true, "delete_blank_lines" in exposed)
+        assertEquals(false, "copy_before" in exposed)
+        assertEquals(false, "new_snippet" in exposed)
+    }
+
+    @Test fun `uuid works from typing and selected text actions`() {
+        val selected = engine.processSelectedText("uuid", "replace me")
+        assertEquals(selected, UUID.fromString(selected).toString())
+
+        val typed = engine.execute(ActionContext("replace me,uuid", "replace me,uuid".length))?.text
+        assertEquals(typed, UUID.fromString(typed).toString())
     }
 }

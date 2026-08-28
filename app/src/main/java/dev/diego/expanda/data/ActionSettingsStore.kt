@@ -50,6 +50,26 @@ class ActionSettingsStore(context: Context) : SharedPreferences.OnSharedPreferen
         preferences.edit().remove(KEY_SHORTCUT_PREFIX + id).apply()
     }
 
+    fun restore(snapshot: BackupCodec.ActionSnapshot) {
+        val knownIds = ActionEngine.definitions.mapTo(linkedSetOf()) { it.id }
+        val enabled = snapshot.enabledIds.intersect(knownIds)
+        preferences.edit().apply {
+            clear()
+            putStringSet(KEY_DISABLED_IDS, knownIds - enabled)
+            snapshot.shortcutOverrides.forEach { (id, shortcut) ->
+                if (id in knownIds && shortcut.isNotBlank()) putString(KEY_SHORTCUT_PREFIX + id, shortcut.trim())
+            }
+        }.apply()
+        mutableEnabledIds.value = readEnabledIds()
+        mutableShortcutOverrides.value = readShortcutOverrides()
+    }
+
+    fun reset() {
+        preferences.edit().clear().apply()
+        mutableEnabledIds.value = readEnabledIds()
+        mutableShortcutOverrides.value = readShortcutOverrides()
+    }
+
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if (key == KEY_DISABLED_IDS) mutableEnabledIds.value = readEnabledIds()
         if (key?.startsWith(KEY_SHORTCUT_PREFIX) == true) {

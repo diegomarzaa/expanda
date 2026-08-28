@@ -1,14 +1,19 @@
 package dev.diego.expanda.engine
 
+import dev.diego.expanda.data.TemplateVariable
+import dev.diego.expanda.data.TextMatch
+import dev.diego.expanda.data.TEMPLATE_VARIABLE_REFERENCE_PATTERN
+import org.json.JSONArray
+import org.json.JSONObject
 import java.time.Clock
-import java.time.LocalDateTime
-import java.time.temporal.ChronoUnit
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.UUID
 import kotlin.random.Random
 
-/** A field that must be completed before a rendered snippet is inserted. */
+/** A field that must be completed before a rendered replacement is inserted. */
 data class TemplateFieldRequest(
     val name: String,
     val label: String = name,
@@ -18,13 +23,20 @@ data class TemplateFieldRequest(
     val start: Int = 0,
     val end: Int = start,
     val occurrence: Int = 0,
+    val inputType: TemplateFieldInputType = TemplateFieldInputType.TEXT,
+    val options: List<String> = emptyList(),
+    /** Values inserted for [options], preserving Espanso choice label/id pairs. */
+    val optionValues: List<String> = options,
+    val multiline: Boolean = false,
 )
 
 typealias TemplateField = TemplateFieldRequest
 
+enum class TemplateFieldInputType { TEXT, CHOICE, DATE, TIME }
+
 enum class TemplateActionType { SEND }
 
-/** A non-text operation requested by a template (for example, sending a message). */
+/** A non-text operation requested by a template. */
 data class TemplateActionRequest(
     val type: TemplateActionType,
     val token: String,
@@ -43,72 +55,189 @@ data class RenderedTemplate(
     val requiresInput: Boolean get() = fields.isNotEmpty()
 
     /**
-     * Applies form values to the ranges reported by the renderer. Values are
-     * looked up by the stable field name first and by the display label as a
-     * convenience. Applying from right to left keeps all earlier ranges valid.
+     * Applies form values from right to left, so nested and repeated fields keep
+     * valid source ranges while earlier replacements are made.
      */
     fun fillFields(values: Map<String, String>): RenderedTemplate {
         if (fields.isEmpty()) return this
         var result = text
         var cursor = cursorOffset
-        fields.sortedByDescending { it.start }.forEach { field ->
-            val value = values[field.name]
-                ?: values[field.label]
-                ?: field.defaultValue
-            val start = field.start.coerceIn(0, result.length)
-            val end = field.end.coerceIn(start, result.length)
-            result = result.replaceRange(start, end, value)
-            val delta = value.length - (end - start)
-            cursor = when {
-                cursor >= end -> cursor + delta
-                cursor > start -> start + value.length
-                else -> cursor
+        fields.sortedWith(compareByDescending<TemplateFieldRequest> { it.start }.thenByDescending { it.end })
+            .forEach { field ->
+                val value = values[field.name]
+                    ?: values[field.label]
+                    ?: field.defaultValue
+                val start = field.start.coerceIn(0, result.length)
+                val end = field.end.coerceIn(start, result.length)
+                result = result.replaceRange(start, end, value)
+                val delta = value.length - (end - start)
+                cursor = when {
+                    cursor >= end -> cursor + delta
+                    cursor > start -> start + value.length
+                    else -> cursor
+                }
             }
-        }
-        return copy(text = result, cursorOffset = cursor.coerceIn(0, result.length), fields = emptyList())
+        return copy(
+            text = result,
+            cursorOffset = cursor.coerceIn(0, result.length),
+            fields = emptyList(),
+        )
     }
 }
 
+private fun String.unescapeVariableInjections(): String =
+    replace("\\{\\{", "{{").replace("\\}\\}", "}}")
+
+private fun RenderedTemplate.unescapeVariableInjections(): RenderedTemplate {
+    if ("\\{\\{" !in text && "\\}\\}" !in text) return this
+
+    fun mappedOffset(offset: Int): Int = text
+        .substring(0, offset.coerceIn(0, text.length))
+        .replace("\\{\\{", "{{")
+        .replace("\\}\\}", "}}")
+        .length
+
+    val unescaped = text.unescapeVariableInjections()
+    return copy(
+        text = unescaped,
+        cursorOffset = mappedOffset(cursorOffset).coerceIn(0, unescaped.length),
+        fields = fields.map { field ->
+            field.copy(
+                start = mappedOffset(field.start),
+                end = mappedOffset(field.end),
+            )
+        },
+        actions = actions.map { action -> action.copy(position = mappedOffset(action.position)) },
+    )
+}
+
+/**
+ * Renders the portable part of Espanso's template language.
+ *
+ * Variable references follow Espanso syntax exactly: `{{name}}` or
+ * `{{name.subname}}`. Single braces are always literal text. Supported portable
+ * variable types are echo, date, random, clipboard, match, choice and form;
+ * unsupported types remain unresolved so Android never silently changes meaning.
+ */
 class TemplateRenderer(
     private val clock: Clock = Clock.systemDefaultZone(),
     private val clipboard: () -> String = { "" },
-    private val snippetResolver: (String) -> String? = { null },
+    private val matchResolver: (String) -> TextMatch? = { null },
     private val random: Random = Random.Default,
 ) {
-    fun render(template: String, fieldValues: Map<String, String> = emptyMap()): RenderedTemplate {
-        val rendered = renderInternal(normalizeLegacy(template), depth = 0)
+    fun render(template: String, fieldValues: Map<String, String> = emptyMap()): RenderedTemplate =
+        render(template, variables = emptyList(), expansionMatch = null, fieldValues = fieldValues)
+
+    fun render(
+        template: String,
+        variables: List<TemplateVariable>,
+        expansionMatch: ExpansionMatch? = null,
+        fieldValues: Map<String, String> = emptyMap(),
+    ): RenderedTemplate = renderWithScope(
+        template = template,
+        localVariables = variables,
+        globalVariables = emptyList(),
+        expansionMatch = expansionMatch,
+        fieldValues = fieldValues,
+    )
+
+    private fun renderWithScope(
+        template: String,
+        localVariables: List<TemplateVariable>,
+        globalVariables: List<TemplateVariable>,
+        expansionMatch: ExpansionMatch?,
+        fieldValues: Map<String, String>,
+    ): RenderedTemplate {
+        val variables = (localVariables + globalVariables).distinctBy(TemplateVariable::name)
+        val context = RenderContext(
+            variables = variables,
+            globalVariables = globalVariables,
+            expansionMatch = expansionMatch,
+            now = Instant.now(clock).atZone(clock.zone),
+        )
+        val rendered = renderInternal(template, context, depth = 0)
+            .unescapeVariableInjections()
         return if (fieldValues.isEmpty()) rendered else rendered.fillFields(fieldValues)
     }
 
-    private fun renderInternal(template: String, depth: Int): RenderedTemplate {
-        val now = LocalDateTime.now(clock)
+    /** Convenience overload for a regex expansion's captures. */
+    fun render(
+        template: String,
+        expansionMatch: ExpansionMatch,
+        variables: List<TemplateVariable> = emptyList(),
+        fieldValues: Map<String, String> = emptyMap(),
+    ): RenderedTemplate = render(template, variables, expansionMatch, fieldValues)
+
+    /** Selects a replacement and renders the variables owned by the canonical match. */
+    fun render(
+        match: TextMatch,
+        expansionMatch: ExpansionMatch? = null,
+        fieldValues: Map<String, String> = emptyMap(),
+        manualIndex: Int? = null,
+        globalVariables: List<TemplateVariable> = emptyList(),
+    ): RenderedTemplate {
+        val selected = TemplateSelector(random).select(match, manualIndex)
+        return renderWithScope(
+            template = selected.text,
+            localVariables = match.vars,
+            globalVariables = globalVariables,
+            expansionMatch = expansionMatch,
+            fieldValues = fieldValues,
+        )
+    }
+
+    private fun renderInternal(
+        template: String,
+        context: RenderContext,
+        depth: Int,
+    ): RenderedTemplate {
+        if (depth > MAX_REFERENCE_DEPTH) {
+            return RenderedTemplate(
+                text = template,
+                cursorOffset = template.length,
+                unresolvedTokens = VARIABLE_REFERENCE.findAll(template).map { it.value }.toList(),
+            )
+        }
+
         var cursorOffset: Int? = null
         val result = StringBuilder()
         val fields = mutableListOf<TemplateFieldRequest>()
         val actions = mutableListOf<TemplateActionRequest>()
         val unresolved = mutableListOf<String>()
-        var index = 0
+        var sourceIndex = 0
 
-        TOKEN.findAll(template).forEach { match ->
-            result.append(template, index, match.range.first)
-            val expression = (match.groups[1]?.value ?: match.groups[2]?.value).orEmpty().trim()
+        TEMPLATE_TOKEN.findAll(template).forEach { tokenMatch ->
+            result.append(template, sourceIndex, tokenMatch.range.first)
             val baseOffset = result.length
-            val output = resolve(expression, match.value, now, depth)
-            if (output == null) {
-                result.append(match.value)
-                unresolved += match.value
+
+            if (tokenMatch.value == CURSOR_MARKER) {
+                cursorOffset = baseOffset
             } else {
-                result.append(output.text)
-                output.cursorOffset?.let { cursorOffset = baseOffset + it }
-                fields += output.fields.map { field ->
-                    field.copy(start = baseOffset + field.start, end = baseOffset + field.end)
+                val expression = tokenMatch.groups[1]?.value.orEmpty()
+                val output = resolveReference(expression, tokenMatch.value, context, depth)
+                if (output == null) {
+                    result.append(tokenMatch.value)
+                    unresolved += tokenMatch.value
+                } else {
+                    result.append(output.text)
+                    output.cursorOffset?.let { cursorOffset = baseOffset + it }
+                    fields += output.fields.map { field ->
+                        val occurrence = fields.count { existing -> existing.name == field.name }
+                        field.copy(
+                            start = baseOffset + field.start,
+                            end = baseOffset + field.end,
+                            occurrence = occurrence,
+                        )
+                    }
+                    actions += output.actions.map { action ->
+                        action.copy(position = baseOffset + action.position)
+                    }
+                    unresolved += output.unresolvedTokens
                 }
-                actions += output.actions.map { action -> action.copy(position = baseOffset + action.position) }
-                unresolved += output.unresolvedTokens
             }
-            index = match.range.last + 1
+            sourceIndex = tokenMatch.range.last + 1
         }
-        result.append(template, index, template.length)
+        result.append(template, sourceIndex, template.length)
         return RenderedTemplate(
             text = result.toString(),
             cursorOffset = (cursorOffset ?: result.length).coerceIn(0, result.length),
@@ -118,93 +247,291 @@ class TemplateRenderer(
         )
     }
 
-    private fun resolve(
+    /**
+     * Resolves only syntax Espanso itself recognizes: a declared variable, a
+     * dotted output from a multi-value form variable, or a named regex capture.
+     * The variable's `type` owns its behavior; names such as `clipboard` or
+     * `date` have no special meaning by themselves.
+     */
+    private fun resolveReference(
         expression: String,
         originalToken: String,
-        now: LocalDateTime,
+        context: RenderContext,
         depth: Int,
     ): TokenOutput? {
-        val name = expression.substringBefore(':').trim().lowercase(Locale.ROOT)
-        val argument = expression.substringAfter(':', "").trim()
-        return when (name) {
-            "cursor" -> TokenOutput(text = "", cursorOffset = 0)
-            "date" -> {
-                val relative = relativeDateTime(argument, now)
-                if (relative != null) TokenOutput(format(relative.first, relative.second))
-                else TokenOutput(format(now, argument.removePrefix("custom:").ifBlank { "yyyy-MM-dd" }))
+        val separator = expression.indexOf('.')
+        if (separator > 0) {
+            val variableName = expression.substring(0, separator)
+            val subname = expression.substring(separator + 1)
+            val variable = context.variables.firstOrNull { it.name == variableName }
+            if (variable != null && variable.type.equals("form", ignoreCase = true)) {
+                return formFieldOutput(variable, subname, originalToken, context, depth)
             }
-            "time" -> {
-                val relative = relativeDateTime(argument, now)
-                if (relative != null) TokenOutput(format(relative.first, relative.second))
-                else TokenOutput(format(now, argument.removePrefix("custom:").ifBlank { "HH:mm" }))
+            return null
+        }
+
+        context.variables.firstOrNull { it.name == expression }?.let { variable ->
+            // Espanso form variables produce multiple named values and therefore
+            // require a dotted reference such as {{form.field}}.
+            if (variable.type.equals("form", ignoreCase = true)) return null
+            return resolveVariable(variable, context, depth)
+        }
+
+        return context.expansionMatch
+            ?.namedCaptureGroups
+            ?.get(expression)
+            ?.let { TokenOutput(it.orEmpty()) }
+    }
+
+    private fun resolveVariable(
+        variable: TemplateVariable,
+        context: RenderContext,
+        depth: Int,
+    ): TokenOutput? {
+        context.cachedVariables[variable.name]?.let { return it }
+        if (depth > MAX_REFERENCE_DEPTH || !context.resolvingVariables.add(variable.name)) return null
+
+        return try {
+            for (dependency in variable.dependsOn) {
+                val dependencyVariable = context.variables.firstOrNull { it.name == dependency } ?: return null
+                if (resolveVariable(dependencyVariable, context, depth + 1) == null) return null
             }
-            "datetime" -> {
-                val relative = relativeDateTime(argument, now)
-                if (relative != null) TokenOutput(format(relative.first, relative.second))
-                else TokenOutput(format(now, argument.removePrefix("custom:").ifBlank { "yyyy-MM-dd HH:mm" }))
-            }
-            "futuredate", "pastdate", "futuretime", "pasttime" ->
-                offsetDateTime(name, argument, now)?.let(::TokenOutput)
-            "clipboard" -> TokenOutput(clipboard())
-            "uuid" -> TokenOutput(UUID.randomUUID().toString())
-            "random" -> TokenOutput(randomString(argument.toIntOrNull()?.coerceIn(1, 128) ?: 8))
-            "snippet" -> {
-                if (depth >= MAX_REFERENCE_DEPTH) {
-                    // A bounded expansion is preferable to a stack overflow;
-                    // dropping the recursive token also avoids inserting a
-                    // misleading half-expanded reference.
-                    TokenOutput("")
-                } else {
-                    snippetResolver(argument)?.let {
-                        val nested = renderInternal(normalizeLegacy(it), depth + 1)
-                        TokenOutput(
-                            text = nested.text,
-                            cursorOffset = nested.cursorOffset,
-                            fields = nested.fields,
-                            actions = nested.actions,
-                            unresolvedTokens = nested.unresolvedTokens,
-                        )
-                    }
+
+            val rawParams = parseParams(variable.paramsJson)
+            val params = if (variable.injectVars) {
+                try {
+                    expandParams(rawParams, context, depth + 1)
+                } catch (_: UnresolvedVariableReference) {
+                    return null
                 }
+            } else {
+                rawParams
             }
-            "form", "textinput", "input" -> formOutput(argument, originalToken)
-            "enter", "newline" -> TokenOutput("\n")
-            "send" -> TokenOutput(
-                text = "",
-                actions = listOf(TemplateActionRequest(TemplateActionType.SEND, originalToken, 0)),
-            )
-            "upper" -> TokenOutput(argument.uppercase(Locale.getDefault()))
-            "lower" -> TokenOutput(argument.lowercase(Locale.getDefault()))
-            "title" -> TokenOutput(
-                argument.split(' ').joinToString(" ") { word ->
-                    word.replaceFirstChar {
-                        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
-                    }
-                },
-            )
-            else -> null
+            val type = variable.type.lowercase(Locale.ROOT)
+            val output = when (type) {
+                "echo" -> TokenOutput(params.string("echo", "value"))
+                "date" -> dateOutput(
+                    params.string("format").ifBlank { "yyyy-MM-dd" },
+                    context,
+                    offsetSeconds = params.optLong("offset", 0),
+                    locale = params.locale(),
+                    timezone = params.timezone(),
+                )
+                "random" -> randomOutput(params)
+                "clipboard" -> TokenOutput(clipboard())
+                "choice" -> choiceOutput(variable, params)
+                "match" -> nestedMatchOutput(params.string("trigger", "match", "name"), context, depth)
+                // In particular, shell and script are intentionally not handled.
+                else -> null
+            }
+
+            if (output != null) context.cachedVariables[variable.name] = output
+            output
+        } finally {
+            context.resolvingVariables.remove(variable.name)
         }
     }
 
-    private fun formOutput(argument: String, token: String): TokenOutput {
-        val parts = argument.split('|', limit = 2)
-        val label = parts.firstOrNull()?.trim().orEmpty().ifBlank { "Field" }
-        val defaultValue = parts.getOrNull(1)?.trim().orEmpty()
-        val name = stableFieldName(label)
+    private fun formFieldOutput(
+        variable: TemplateVariable,
+        fieldName: String,
+        token: String,
+        context: RenderContext,
+        depth: Int,
+    ): TokenOutput? {
+        if (depth > MAX_REFERENCE_DEPTH || !context.resolvingVariables.add(variable.name)) return null
+        return try {
+            for (dependency in variable.dependsOn) {
+                val dependencyVariable = context.variables.firstOrNull { it.name == dependency } ?: return null
+                if (resolveVariable(dependencyVariable, context, depth + 1) == null) return null
+            }
+
+            val rawParams = parseParams(variable.paramsJson)
+            val params = if (variable.injectVars) {
+                try {
+                    expandParams(rawParams, context, depth + 1)
+                } catch (_: UnresolvedVariableReference) {
+                    return null
+                }
+            } else {
+                rawParams
+            }
+            val definition = params.optJSONObject("fields")?.optJSONObject(fieldName)
+            val defaultValue = fieldDefault(definition)
+            val inputType = fieldInputType(definition)
+            val label = "${variable.name}.$fieldName"
+            TokenOutput(
+                text = defaultValue,
+                fields = listOf(
+                    TemplateFieldRequest(
+                        name = stableFieldName(label),
+                        label = label,
+                        token = token,
+                        defaultValue = defaultValue,
+                        end = defaultValue.length,
+                        inputType = inputType,
+                        options = definition?.strings("values").orEmpty(),
+                        multiline = definition?.optBoolean("multiline") == true,
+                    ),
+                ),
+            )
+        } finally {
+            context.resolvingVariables.remove(variable.name)
+        }
+    }
+
+    private fun fieldDefault(definition: JSONObject?, fallback: String = ""): String {
+        if (definition == null) return fallback
+        val explicit = definition.string("default")
+        if (explicit.isNotBlank()) return explicit
+        val values = definition.strings("values")
+        return if (
+            definition.string("type").lowercase(Locale.ROOT) in setOf("choice", "list") &&
+            values.isNotEmpty()
+        ) {
+            values.first()
+        } else {
+            fallback
+        }
+    }
+
+    private fun fieldInputType(definition: JSONObject?): TemplateFieldInputType = when (
+        definition?.string("type")?.lowercase(Locale.ROOT)
+    ) {
+        "choice", "list" -> TemplateFieldInputType.CHOICE
+        "date" -> TemplateFieldInputType.DATE
+        "time" -> TemplateFieldInputType.TIME
+        else -> TemplateFieldInputType.TEXT
+    }
+
+    private fun dateOutput(
+        pattern: String,
+        context: RenderContext,
+        offsetSeconds: Long = 0,
+        locale: Locale = Locale.getDefault(),
+        timezone: ZoneId = context.now.zone,
+    ): TokenOutput {
+        val value = context.now.plusSeconds(offsetSeconds).withZoneSameInstant(timezone)
+        return TokenOutput(format(value, pattern.ifBlank { "yyyy-MM-dd" }, locale))
+    }
+
+    private fun randomOutput(params: JSONObject): TokenOutput {
+        val choices = params.strings("choices")
+        if (choices.isNotEmpty()) return TokenOutput(choices[random.nextInt(choices.size)])
+        val length = params.optInt("length", DEFAULT_RANDOM_LENGTH).coerceIn(1, MAX_RANDOM_LENGTH)
+        val alphabet = params.string("alphabet").ifBlank { ALPHANUMERIC }
+        return TokenOutput(randomString(length, alphabet))
+    }
+
+    private fun choiceOutput(
+        variable: TemplateVariable,
+        params: JSONObject,
+    ): TokenOutput {
+        val choices = params.choiceValues().map {
+            ChoiceValue(
+                label = it.label,
+                value = it.value,
+            )
+        }
+        return choiceValueFieldOutput(variable.name, "{{${variable.name}}}", choices)
+    }
+
+    private fun choiceValueFieldOutput(name: String, token: String, choices: List<ChoiceValue>): TokenOutput {
+        if (choices.isEmpty()) return TokenOutput("")
         return TokenOutput(
-            text = defaultValue,
+            text = "",
             fields = listOf(
                 TemplateFieldRequest(
-                    name = name,
-                    label = label,
+                    name = stableFieldName(name),
+                    label = name,
                     token = token,
-                    defaultValue = defaultValue,
-                    start = 0,
-                    end = defaultValue.length,
-                    occurrence = 0,
+                    inputType = TemplateFieldInputType.CHOICE,
+                    options = choices.map(ChoiceValue::label),
+                    optionValues = choices.map(ChoiceValue::value),
                 ),
             ),
         )
+    }
+
+    private fun nestedMatchOutput(
+        trigger: String,
+        context: RenderContext,
+        depth: Int,
+    ): TokenOutput? {
+        val key = trigger.trim()
+        if (key.isBlank() || depth >= MAX_REFERENCE_DEPTH) return null
+        val nested = matchResolver(key) ?: return null
+        val selected = TemplateSelector(random).select(nested).text
+        val nestedContext = RenderContext(
+            variables = (nested.vars + context.globalVariables).distinctBy(TemplateVariable::name),
+            globalVariables = context.globalVariables,
+            expansionMatch = context.expansionMatch,
+            now = context.now,
+        )
+        val rendered = renderInternal(selected, nestedContext, depth + 1)
+        return TokenOutput(
+            text = rendered.text,
+            cursorOffset = rendered.cursorOffset,
+            fields = rendered.fields,
+            actions = rendered.actions,
+            unresolvedTokens = rendered.unresolvedTokens,
+        )
+    }
+
+    private fun expandScalar(value: String, context: RenderContext, depth: Int): String {
+        if (value.isBlank() || depth > MAX_REFERENCE_DEPTH) return value.unescapeVariableInjections()
+        val expanded = VARIABLE_REFERENCE.replace(value) { token ->
+            resolveReference(
+                expression = token.groups[1]?.value.orEmpty(),
+                originalToken = token.value,
+                context = context,
+                depth = depth + 1,
+            )?.text ?: throw UnresolvedVariableReference(token.value)
+        }
+        return expanded.unescapeVariableInjections()
+    }
+
+    private fun expandParams(value: JSONObject, context: RenderContext, depth: Int): JSONObject = JSONObject().apply {
+        value.keys().forEach { key -> put(key, expandParamValue(value.opt(key), context, depth)) }
+    }
+
+    private fun expandParamValue(value: Any?, context: RenderContext, depth: Int): Any? = when (value) {
+        is String -> expandScalar(value, context, depth)
+        is JSONObject -> expandParams(value, context, depth)
+        is JSONArray -> JSONArray().apply {
+            for (index in 0 until value.length()) put(expandParamValue(value.opt(index), context, depth))
+        }
+        else -> value
+    }
+
+    private fun format(value: ZonedDateTime, pattern: String, locale: Locale): String = runCatching {
+        value.format(DateTimeFormatter.ofPattern(toJavaDatePattern(pattern), locale))
+    }.getOrElse { value.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) }
+
+    private fun toJavaDatePattern(pattern: String): String {
+        if (!pattern.contains('%')) return pattern
+        return pattern
+            .replace("%%", "%")
+            .replace("%Y", "yyyy")
+            .replace("%y", "yy")
+            .replace("%B", "MMMM")
+            .replace("%b", "MMM")
+            .replace("%A", "EEEE")
+            .replace("%a", "EEE")
+            .replace("%m", "MM")
+            .replace("%d", "dd")
+            .replace("%H", "HH")
+            .replace("%M", "mm")
+            .replace("%S", "ss")
+            .replace("%x", "MM/dd/yy")
+            .replace("%X", "HH:mm:ss")
+    }
+
+    private fun randomString(length: Int, alphabet: String = ALPHANUMERIC): String {
+        val source = alphabet.ifEmpty { ALPHANUMERIC }
+        return buildString(length) {
+            repeat(length) { append(source[random.nextInt(source.length)]) }
+        }
     }
 
     private fun stableFieldName(label: String): String = label
@@ -213,72 +540,18 @@ class TemplateRenderer(
         .trim('_')
         .ifBlank { "FIELD" }
 
-    private fun format(value: LocalDateTime, pattern: String): String = runCatching {
-        value.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
-    }.getOrElse { value.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) }
+    private fun parseParams(value: String): JSONObject = runCatching { JSONObject(value) }.getOrElse { JSONObject() }
 
-    private fun randomString(length: Int): String = buildString(length) {
-        repeat(length) { append(ALPHANUMERIC[random.nextInt(ALPHANUMERIC.length)]) }
-    }
+    private class UnresolvedVariableReference(token: String) : RuntimeException(token)
 
-    private fun normalizeLegacy(template: String): String {
-        var result = template
-        LEGACY_SIMPLE.forEach { (legacy, modern) -> result = result.replace(legacy, modern, ignoreCase = true) }
-        result = LEGACY_SINGLE_TOKEN.replace(result) { "{{${it.groupValues[1]}}}" }
-        result = LEGACY_SNIPPET_PERCENT.replace(result) { "{{snippet:${it.groupValues[1]}}}" }
-        result = LEGACY_SNIPPET_BRACES.replace(result) { "{{snippet:${it.groupValues[1]}}}" }
-        result = LEGACY_DATETIME.replace(result) { "{{datetime:${it.groupValues[1]}}}" }
-        result = LEGACY_FORM.replace(result) { "{{form:${it.groupValues[1]}}}" }
-        result = LEGACY_OFFSET.replace(result) { "{{${it.groupValues[1]}:${it.groupValues[2]}}}" }
-        return result
-    }
-
-    /** Parses both the historic `futuredate:2:DAY:pattern` and relative DATE/TIME forms. */
-    private fun offsetDateTime(name: String, argument: String, now: LocalDateTime): String? {
-        val parts = argument.split(':', limit = 3)
-        if (parts.size != 3) return null
-        val amount = parts[0].toLongOrNull() ?: return null
-        val signed = if (name.startsWith("past")) -amount else amount
-        val shifted = shift(now, signed, parts[1]) ?: return null
-        return format(shifted, parts[2])
-    }
-
-    /** Supports `{DATE:+2:DAY:yyyy-MM-dd}` and compact `{TIME:-3d:yyyy-MM-dd}`. */
-    private fun relativeDateTime(argument: String, now: LocalDateTime): Pair<LocalDateTime, String>? {
-        if (!argument.startsWith('+') && !argument.startsWith('-')) return null
-        val parts = argument.split(':', limit = 3)
-        val unit: String
-        val pattern: String
-        if (parts.size >= 3) {
-            val rawAmount = parts.firstOrNull()?.toLongOrNull() ?: return null
-            unit = parts[1]
-            pattern = parts[2]
-            return shift(now, rawAmount, unit)?.let { it to pattern }
-        } else {
-            val compact = parts.first()
-            if (compact.length < 2) return null
-            val amount = compact.dropLast(1).toLongOrNull() ?: return null
-            unit = when (compact.last().lowercaseChar()) {
-                'm' -> "MINUTE"
-                'h' -> "HOUR"
-                'd' -> "DAY"
-                'w' -> "WEEK"
-                else -> return null
-            }
-            pattern = "yyyy-MM-dd"
-            return shift(now, amount, unit)?.let { it to pattern }
-        }
-    }
-
-    private fun shift(now: LocalDateTime, amount: Long, unit: String): LocalDateTime? = when (unit.uppercase(Locale.ROOT)) {
-        "MINUTE", "MINUTES", "M" -> now.plus(amount, ChronoUnit.MINUTES)
-        "HOUR", "HOURS", "H" -> now.plus(amount, ChronoUnit.HOURS)
-        "DAY", "DAYS", "D" -> now.plus(amount, ChronoUnit.DAYS)
-        "WEEK", "WEEKS", "W" -> now.plus(amount, ChronoUnit.WEEKS)
-        "MONTH", "MONTHS" -> now.plus(amount, ChronoUnit.MONTHS)
-        "YEAR", "YEARS", "Y" -> now.plus(amount, ChronoUnit.YEARS)
-        else -> null
-    }
+    private data class RenderContext(
+        val variables: List<TemplateVariable>,
+        val globalVariables: List<TemplateVariable> = emptyList(),
+        val expansionMatch: ExpansionMatch?,
+        val now: ZonedDateTime,
+        val cachedVariables: MutableMap<String, TokenOutput> = mutableMapOf(),
+        val resolvingVariables: MutableSet<String> = mutableSetOf(),
+    )
 
     private data class TokenOutput(
         val text: String,
@@ -288,21 +561,65 @@ class TemplateRenderer(
         val unresolvedTokens: List<String> = emptyList(),
     )
 
+    private fun JSONObject.string(vararg keys: String): String = keys
+        .asSequence()
+        .map { optString(it) }
+        .firstOrNull(String::isNotBlank)
+        .orEmpty()
+
+    private fun JSONObject.locale(): Locale = string("locale")
+        .takeIf(String::isNotBlank)
+        ?.let(Locale::forLanguageTag)
+        ?.takeIf { it.language.isNotBlank() }
+        ?: Locale.getDefault()
+
+    private fun JSONObject.timezone(): ZoneId = runCatching { ZoneId.of(string("tz", "timezone")) }
+        .getOrDefault(ZoneId.systemDefault())
+
+    private fun JSONObject.strings(key: String): List<String> {
+        val value = opt(key)
+        return when (value) {
+            is JSONArray -> buildList(value.length()) {
+                for (index in 0 until value.length()) {
+                    val item = value.opt(index)
+                    when (item) {
+                        is JSONObject -> item.string("id", "value", "label").takeIf(String::isNotBlank)?.let(::add)
+                        else -> item?.toString()?.takeIf(String::isNotBlank)?.let(::add)
+                    }
+                }
+            }
+            is String -> value.lines().filter(String::isNotBlank)
+            else -> emptyList()
+        }
+    }
+
+    private fun JSONObject.choiceValues(): List<ChoiceValue> {
+        val value = opt("values") ?: opt("choices") ?: return emptyList()
+        return when (value) {
+            is JSONArray -> buildList(value.length()) {
+                for (index in 0 until value.length()) {
+                    val item = value.opt(index)
+                    if (item is JSONObject) {
+                        add(ChoiceValue(item.string("label"), item.string("id", "value", "label")))
+                    } else {
+                        item?.toString()?.let { add(ChoiceValue(it, it)) }
+                    }
+                }
+            }
+            is String -> value.lines().filter(String::isNotBlank).map { ChoiceValue(it, it) }
+            else -> emptyList()
+        }
+    }
+
+    private data class ChoiceValue(val label: String, val value: String)
+
     companion object {
-        private val TOKEN = Regex("""\{\{([^{}]+)\}\}|\{([^{}]+)\}""")
-        private val LEGACY_SNIPPET_PERCENT = Regex("""%snippet:([^%\s]{2,})%""", RegexOption.IGNORE_CASE)
-        private val LEGACY_SNIPPET_BRACES = Regex("""(?<!\{)\{snippet:([^}\s]{2,})\}(?!\})""", RegexOption.IGNORE_CASE)
-        private val LEGACY_DATETIME = Regex("""(?<!\{)\{datetime:([^}]+)\}(?!\})""", RegexOption.IGNORE_CASE)
-        private val LEGACY_FORM = Regex("""%textinput:([^%]+)%""", RegexOption.IGNORE_CASE)
-        private val LEGACY_OFFSET = Regex("""%(futuredate|pastdate|futuretime|pasttime):([^%]+)%""", RegexOption.IGNORE_CASE)
-        private val LEGACY_SINGLE_TOKEN = Regex("""(?<!\{)\{(cursor|clipboard|date|time|enter|send)\}(?!\})""", RegexOption.IGNORE_CASE)
-        private val LEGACY_SIMPLE = mapOf(
-            "%cursor%" to "{{cursor}}",
-            "[cursor]" to "{{cursor}}",
-            "%clipboard_paste%" to "{{clipboard}}",
-            "[clipboard]" to "{{clipboard}}",
-        )
+        private const val DEFAULT_RANDOM_LENGTH = 8
+        private const val MAX_RANDOM_LENGTH = 128
         private const val MAX_REFERENCE_DEPTH = 8
+        private const val CURSOR_MARKER = "$|$"
+        private val VARIABLE_REFERENCE = Regex(TEMPLATE_VARIABLE_REFERENCE_PATTERN)
+        private val TEMPLATE_TOKEN = Regex("""\$\|\$|$TEMPLATE_VARIABLE_REFERENCE_PATTERN""")
         private const val ALPHANUMERIC = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
     }
 }

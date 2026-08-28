@@ -7,15 +7,23 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import dev.diego.expanda.engine.MathEvaluator
-import java.util.Locale
+import androidx.compose.ui.unit.dp
+import dev.diego.expanda.ExpandaApplication
+import dev.diego.expanda.engine.ActionDefinition
+import dev.diego.expanda.engine.ActionEngine
+import dev.diego.expanda.ui.theme.ExpandaTheme
 
 class ProcessTextActivity : ComponentActivity() {
     private val selectedText: String by lazy {
@@ -29,7 +37,8 @@ class ProcessTextActivity : ComponentActivity() {
             return
         }
         setContent {
-            MaterialTheme { ActionChooser(selectedText, ::returnText) { finish() } }
+            val settings by (application as ExpandaApplication).settingsRepository.settings.collectAsState()
+            ExpandaTheme(settings) { ActionChooser(selectedText, ::returnText) { finish() } }
         }
     }
 
@@ -45,30 +54,34 @@ class ProcessTextActivity : ComponentActivity() {
 
 @Composable
 private fun ActionChooser(text: String, select: (String) -> Unit, dismiss: () -> Unit) {
-    val title = text.split(Regex("\\s+")).joinToString(" ") { word ->
-        word.lowercase(Locale.getDefault()).replaceFirstChar { it.titlecase(Locale.getDefault()) }
+    val engine = ActionEngine()
+    val actions = ActionEngine.definitions.filter(ActionDefinition::supportsSelectedText)
+    val results = actions.mapNotNull { action ->
+        engine.processSelectedText(action.id, text)
+            ?.takeIf { it != text }
+            ?.let { action to it }
     }
-    val calculation = MathEvaluator.evaluate(text).getOrNull()?.let(::formatNumber)
     AlertDialog(
         onDismissRequest = dismiss,
         title = { Text("Expanda actions") },
         text = {
-            Column(Modifier.fillMaxWidth()) {
-                ListItem(headlineContent = { Text("UPPERCASE") }, modifier = Modifier.fillMaxWidth(),
-                    trailingContent = { TextButton(onClick = { select(text.uppercase()) }) { Text("Use") } })
-                ListItem(headlineContent = { Text("lowercase") }, modifier = Modifier.fillMaxWidth(),
-                    trailingContent = { TextButton(onClick = { select(text.lowercase()) }) { Text("Use") } })
-                ListItem(headlineContent = { Text("Title Case") }, modifier = Modifier.fillMaxWidth(),
-                    trailingContent = { TextButton(onClick = { select(title) }) { Text("Use") } })
-                if (calculation != null) ListItem(
-                    headlineContent = { Text("Calculate: $calculation") },
-                    trailingContent = { TextButton(onClick = { select(calculation) }) { Text("Use") } },
-                )
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                if (results.isEmpty()) Text("No transformation changes this selection.")
+                results.forEach { (action, result) ->
+                    ListItem(
+                        headlineContent = { Text(action.title) },
+                        supportingContent = { Text(action.description) },
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingContent = {
+                            TextButton(onClick = { select(result) }) { Text("Use") }
+                        },
+                    )
+                }
             }
         },
         confirmButton = { TextButton(onClick = dismiss) { Text("Cancel") } },
     )
 }
-
-private fun formatNumber(value: Double): String =
-    if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()

@@ -1,0 +1,7 @@
+0.3.0-beta — major pre-release.
+
+Espanso-compatible snippets and YAML Source tab. Playground, tutorial onboarding, full backups, app-only or linked folder storage.
+
+Duplicate-trigger picker, clipboard fix in other apps, resizable suggestions (default near top), improved forms and case matching.
+
+Breaking upgrade from 0.2.0. License is now GPLv3.

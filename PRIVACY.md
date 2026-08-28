@@ -1,6 +1,6 @@
 # Privacy
 
-Effective date: 20 August 2026
+Effective date: 25 August 2026
 
 Expanda processes text on your Android device. The app does not declare the Android `INTERNET` permission and contains no advertising, analytics or tracking SDKs.
 
@@ -25,7 +25,7 @@ Expanda stores no account, advertising identifier or remote analytics identifier
 
 ## Clipboard access
 
-Expanda can read clipboard text for the `{CLIPBOARD}` token, clipboard actions and the optional clipboard history. The history captures the current clipboard when Expanda returns to the foreground. It remains in the local database until you delete entries, clear the unpinned history or clear the app's storage.
+Expanda can read clipboard text for the `{CLIPBOARD}` token, clipboard actions and the optional clipboard history. The history captures the current clipboard when Expanda returns to the foreground. It remains in the local database until you clear the history in Settings or clear the app's storage.
 
 The optional compatibility paste fallback uses the system clipboard when an editor rejects direct text replacement. It restores the previous clipboard content after the operation where Android permits it.
 
@@ -39,15 +39,15 @@ An Android text action can open the system share sheet. You choose the receiving
 
 Automatic Android application backup is disabled in the manifest.
 
-You can create a JSON backup or CSV export from Settings. These files are unencrypted and may contain private snippet text. You choose the destination through Android's document picker and remain responsible for storing or sharing the exported file.
+You can create a full JSON backup, CSV export or Espanso YAML export from Settings. These files are unencrypted and may contain private snippet text. You choose the destination through Android's document picker and remain responsible for storing or sharing the exported file.
 
-JSON backups and CSV exports contain snippets. They do not include clipboard history or expansion logs.
+Full backups contain snippets, variables, settings, excluded-app package names and action configuration. They do not include clipboard history, expansion logs, Android permissions, battery settings or the popup's screen coordinates. CSV and Espanso files contain portable snippet data rather than app settings.
 
 ## Data deletion
 
-You can delete individual snippets and clipboard entries inside the app. The clear-history control removes unpinned clipboard entries. Android's **Clear storage** action or uninstalling Expanda removes its private database and settings from the device.
+You can delete snippets inside the app and clear the complete clipboard history or usage statistics from Settings. **Reset Expanda**, Android's **Clear storage** action or uninstalling Expanda removes its local data and settings from the device.
 
-Delete any JSON or CSV exports separately from the location where you saved them.
+Delete exported JSON, YAML or CSV files separately from the location where you saved them.
 
 ## Permissions
 

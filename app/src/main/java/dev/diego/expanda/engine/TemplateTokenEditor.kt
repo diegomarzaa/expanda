@@ -1,6 +1,8 @@
 package dev.diego.expanda.engine
 
-import java.util.Locale
+import dev.diego.expanda.data.ESPANSO_WORD_PATTERN
+import dev.diego.expanda.data.TEMPLATE_VARIABLE_REFERENCE
+import dev.diego.expanda.data.isEspansoWord
 
 data class TemplateTokenSpan(
     val start: Int,
@@ -16,32 +18,21 @@ data class TemplateEditResult(
     val replacedRange: IntRange? = null,
 )
 
-data class TemplateTokenOption(
-    val label: String,
-    val token: String,
-    val description: String = "",
+data class TemplateRewriteResult(
+    val text: String,
+    val selectionStart: Int,
+    val selectionEnd: Int,
 )
 
 /**
- * Token-aware editing helpers for the Compose snippet editor.
+ * Token-aware editing helpers for the Compose match editor.
  *
  * Android's BasicTextField reports ordinary character offsets. These helpers
  * turn a template token into one logical unit for insertion and backspace,
- * preventing `{FORM: NAME}` or `{SNIPPET: /sig}` from being left half-written.
+ * preventing Espanso references such as `{{clipboard}}` from being left half-written.
  */
 object TemplateTokenEditor {
-    private val tokenPattern = Regex("""\{\{[^{}]+\}\}|\{[^{}]+\}""")
-
-    val options: List<TemplateTokenOption> = listOf(
-        TemplateTokenOption("Cursor", "{CURSOR}", "Place the cursor here"),
-        TemplateTokenOption("Clipboard", "{CLIPBOARD}", "Insert the current clipboard text"),
-        TemplateTokenOption("Date", "{DATE:yyyy-MM-dd}", "Insert a formatted date"),
-        TemplateTokenOption("Time", "{TIME:HH:mm}", "Insert a formatted time"),
-        TemplateTokenOption("Form field", "{FORM: NAME}", "Ask for a value when the snippet is used"),
-        TemplateTokenOption("Nested snippet", "{SNIPPET: shortcut}", "Insert another snippet"),
-        TemplateTokenOption("Enter", "{ENTER}", "Insert a line break"),
-        TemplateTokenOption("Send", "{SEND}", "Request a send action after insertion"),
-    )
+    private val tokenPattern = Regex("""\$\|\$|${TEMPLATE_VARIABLE_REFERENCE.pattern}""")
 
     fun insert(
         text: String,
@@ -104,22 +95,81 @@ object TemplateTokenEditor {
         }?.let { TemplateTokenSpan(it.range.first, it.range.last + 1, it.value) }
     }
 
-    fun isTemplateToken(value: String): Boolean {
-        val expression = value.removePrefix("{{").removeSuffix("}}").removePrefix("{").removeSuffix("}")
-        val name = expression.substringBefore(':').trim().uppercase(Locale.ROOT)
-        return name in setOf(
-            "CURSOR", "CLIPBOARD", "DATE", "TIME", "DATETIME", "FUTUREDATE", "PASTDATE",
-            "FUTURETIME", "PASTTIME", "UUID", "RANDOM", "SNIPPET", "FORM", "TEXTINPUT",
-            "INPUT", "ENTER", "NEWLINE", "SEND", "UPPER", "LOWER", "TITLE",
+    /** Returns the owning variable when the caret is on a {{name}} reference. */
+    fun variableNameAt(text: String, offset: Int): String? {
+        val safeOffset = offset.coerceIn(0, text.length)
+        return TEMPLATE_VARIABLE_REFERENCE.findAll(text).firstOrNull { match ->
+            safeOffset > match.range.first && safeOffset < match.range.last + 1
+        }?.groupValues?.get(2)
+    }
+
+    /** Returns a known named regex capture only when the caret is inside it. */
+    fun captureReferenceAt(text: String, offset: Int, namedCaptures: Set<String> = emptySet()): TemplateTokenSpan? {
+        val safeOffset = offset.coerceIn(0, text.length)
+        return TEMPLATE_VARIABLE_REFERENCE.findAll(text).firstOrNull { match ->
+            if (safeOffset <= match.range.first || safeOffset >= match.range.last + 1) return@firstOrNull false
+            match.groupValues[1] in namedCaptures
+        }?.let { TemplateTokenSpan(it.range.first, it.range.last + 1, it.value) }
+    }
+
+    /**
+     * Renames or removes every reference to one variable while keeping a Compose
+     * text selection aligned. Dotted form references keep their field suffix.
+     */
+    fun rewriteVariableReferences(
+        text: String,
+        oldName: String,
+        newName: String?,
+        selectionStart: Int = text.length,
+        selectionEnd: Int = selectionStart,
+    ): TemplateRewriteResult {
+        val pattern = Regex(
+            """\{\{\s*${Regex.escape(oldName)}(?:\.($ESPANSO_WORD_PATTERN))?\s*\}\}""",
+        )
+        val replacements = pattern.findAll(text).map { match ->
+            val suffix = match.groupValues[1].takeIf(String::isNotEmpty)?.let { ".$it" }.orEmpty()
+            match to newName?.let { "{{$it$suffix}}" }.orEmpty()
+        }.toList()
+        val rewritten = buildString(text.length) {
+            var sourceIndex = 0
+            replacements.forEach { (match, replacement) ->
+                append(text, sourceIndex, match.range.first)
+                append(replacement)
+                sourceIndex = match.range.last + 1
+            }
+            append(text, sourceIndex, text.length)
+        }
+        return TemplateRewriteResult(
+            text = rewritten,
+            selectionStart = mapOffset(selectionStart, text.length, replacements).coerceIn(0, rewritten.length),
+            selectionEnd = mapOffset(selectionEnd, text.length, replacements).coerceIn(0, rewritten.length),
         )
     }
 
-    private fun normalizeToken(token: String): String {
-        val trimmed = token.trim()
-        return when {
-            trimmed.startsWith("{{") && trimmed.endsWith("}}") -> trimmed
-            trimmed.startsWith("{") && trimmed.endsWith("}") -> trimmed
-            else -> "{$trimmed}"
+    fun isTemplateToken(value: String): Boolean =
+        value == "$|$" || TEMPLATE_VARIABLE_REFERENCE.matches(value)
+
+    private fun mapOffset(
+        offset: Int,
+        textLength: Int,
+        replacements: List<Pair<MatchResult, String>>,
+    ): Int {
+        val safeOffset = offset.coerceIn(0, textLength)
+        var accumulatedDelta = 0
+        replacements.forEach { (match, replacement) ->
+            val start = match.range.first
+            val end = match.range.last + 1
+            if (safeOffset <= start) return safeOffset + accumulatedDelta
+            if (safeOffset < end) return start + accumulatedDelta + replacement.length
+            accumulatedDelta += replacement.length - (end - start)
         }
+        return safeOffset + accumulatedDelta
+    }
+
+    private fun normalizeToken(token: String): String {
+        if (token == "\n" || token == "$|$") return token
+        val trimmed = token.trim()
+        if (TEMPLATE_VARIABLE_REFERENCE.matches(trimmed)) return trimmed
+        return if (isEspansoWord(trimmed)) "{{$trimmed}}" else token
     }
 }

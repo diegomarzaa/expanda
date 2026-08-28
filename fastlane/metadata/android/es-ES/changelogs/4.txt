@@ -1,0 +1,7 @@
+0.3.0-beta — gran versión preliminar.
+
+Fragmentos compatibles con Espanso y pestaña de código fuente YAML. Playground, tutorial de introducción, copias de seguridad completas y almacenamiento solo en la app o mediante una carpeta vinculada.
+
+Selector para activadores duplicados, corrección del portapapeles en otras aplicaciones, sugerencias redimensionables (por defecto cerca de la parte superior), formularios mejorados y mejor coincidencia entre mayúsculas y minúsculas.
+
+Actualización con cambios incompatibles respecto a la versión 0.2.0. La licencia ahora es GPLv3.
