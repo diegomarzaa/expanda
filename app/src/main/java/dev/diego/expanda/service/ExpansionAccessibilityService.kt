@@ -49,6 +49,7 @@ import dev.diego.expanda.engine.ActionDefinition
 import dev.diego.expanda.engine.ActionEngine
 import dev.diego.expanda.engine.ActionOutcome
 import dev.diego.expanda.engine.ActionRequest
+import dev.diego.expanda.engine.AppliedExpansion
 import dev.diego.expanda.engine.ExpansionEngine
 import dev.diego.expanda.engine.ExpansionMatch
 import dev.diego.expanda.engine.TemplateRenderer
@@ -399,31 +400,35 @@ class ExpansionAccessibilityService : AccessibilityService() {
         }
 
         // ── write into the editor ───────────────────────────────────────
-        val arguments = Bundle().apply {
-            putCharSequence(
-                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                finalText,
+        // Native EditText widgets accept ACTION_SET_TEXT as an atomic replacement.
+        // Everything else — WebView editors (Obsidian/CodeMirror, Chrome, Discord,
+        // Capacitor apps), Compose fields exposed as android.view.View, custom OEM
+        // widgets — either desyncs its buffer or ignores the action, so we route
+        // those through ACTION_PASTE (which Blink treats as a real paste event).
+        val nativeEditor = isNativeEditText(node)
+        val replacement = replacementSlice(match, applied, originalText, finalText)
+        val writeSucceeded = if (nativeEditor) {
+            writeViaSetText(
+                node = node,
+                finalText = finalText,
+                selectionStart = finalCursor,
+                selectionEnd = finalCursor,
+            ) || pasteReplacement(
+                node, match.replaceFrom, match.replaceTo,
+                replacement, finalCursor,
             )
-        }
-        val replaced = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-        if (replaced) {
-            runCatching { node.refresh() }
-            setSelection(node, finalCursor, finalCursor)
         } else {
-            val replacementLength = applied.text.length - originalText.length +
-                (match.replaceTo - match.replaceFrom)
-            val replacement = finalText.substring(
-                match.replaceFrom,
-                (match.replaceFrom + replacementLength).coerceAtMost(finalText.length),
+            pasteReplacement(
+                node, match.replaceFrom, match.replaceTo,
+                replacement, finalCursor,
+            ) || writeViaSetText(
+                node = node,
+                finalText = finalText,
+                selectionStart = finalCursor,
+                selectionEnd = finalCursor,
             )
-            if (
-                !settings.pasteFallbackEnabled ||
-                !pasteReplacement(
-                    node, match.replaceFrom, match.replaceTo,
-                    replacement, finalCursor,
-                )
-            ) return false
         }
+        if (!writeSucceeded) return false
 
         // ── book-keeping ────────────────────────────────────────────────
         val restoredText = originalText.replaceRange(
@@ -1225,6 +1230,90 @@ class ExpansionAccessibilityService : AccessibilityService() {
             },
         )
 
+    /**
+     * Positions the caret / selection after an [AccessibilityNodeInfo.ACTION_SET_TEXT] call.
+     *
+     * WebView-based editors (Gmail composer, Chrome, Obsidian) apply the text change
+     * asynchronously in Blink. The immediate ACTION_SET_SELECTION lands before the
+     * DOM catches up and Chromium collapses the caret to position 0. We clear our
+     * per-service cache, refresh the node so future reads see fresh data, apply the
+     * selection once, and schedule a second attempt on the next frame that only
+     * fires if the caret really did drift from what we requested.
+     */
+    private fun commitSelectionAfterSetText(
+        node: AccessibilityNodeInfo,
+        start: Int,
+        end: Int = start,
+    ) {
+        clearAccessibilityCache()
+        runCatching { node.refresh() }
+        setSelection(node, start, end)
+
+        val packageName = node.packageName?.toString().orEmpty()
+        if (packageName.isEmpty()) return
+        val anchor = createSuggestionAnchor(node, packageName)
+        mainHandler.postDelayed(
+            {
+                val fresh = findAnchoredEditor(anchor) ?: return@postDelayed
+                try {
+                    val actualEnd = fresh.textSelectionEnd
+                    val actualStart = fresh.textSelectionStart
+                    if (actualEnd != end || actualStart != start) {
+                        runCatching { fresh.refresh() }
+                        setSelection(fresh, start, end)
+                    }
+                } finally {
+                    @Suppress("DEPRECATION")
+                    fresh.recycle()
+                }
+            },
+            WEBVIEW_SELECTION_RETRY_DELAY_MS,
+        )
+    }
+
+    /** Drops the framework's per-service node cache; a no-op below API 33. */
+    private fun clearAccessibilityCache() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            runCatching { clearCache() }
+        }
+    }
+
+    /**
+     * True when [node] is a native Android EditText / AutoCompleteTextView (or any
+     * subclass). ACTION_SET_TEXT is only reliable for these; anything else — WebView
+     * editors (Chrome, Discord message input), Compose text fields exposed with a
+     * generic class name, custom OEM widgets, canvas-based editors — is routed
+     * through ACTION_PASTE.
+     *
+     * An explicit package override lets us force paste for apps that lie about the
+     * class name; today that list is empty because the offenders we've seen so far
+     * (Obsidian) desync with paste too, so forcing it makes things worse.
+     */
+    private fun isNativeEditText(node: AccessibilityNodeInfo): Boolean {
+        val className = node.className?.toString()
+        val packageName = node.packageName?.toString()
+        if (WebViewEditorDetection.requiresPasteWrite(packageName)) return false
+        return WebViewEditorDetection.isNativeEditorClass(className)
+    }
+
+    /**
+     * Slice of [finalText] that must land in `[match.replaceFrom, match.replaceTo)`
+     * inside the editor. Everything outside that range stays untouched.
+     */
+    private fun replacementSlice(
+        match: ExpansionMatch,
+        applied: AppliedExpansion,
+        originalText: String,
+        finalText: String,
+    ): String {
+        val replacementLength = applied.text.length - originalText.length +
+            (match.replaceTo - match.replaceFrom)
+        return finalText.substring(
+            match.replaceFrom,
+            (match.replaceFrom + replacementLength).coerceAtMost(finalText.length),
+        )
+    }
+
     /** Apply an action as one atomic field update, with the existing fallback for editors that reject ACTION_SET_TEXT. */
     private fun applyAction(
         node: AccessibilityNodeInfo,
@@ -1250,21 +1339,40 @@ class ExpansionAccessibilityService : AccessibilityService() {
         selectionEnd: Int,
         settings: AppSettings,
     ): Boolean {
-        val arguments = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText)
-        }
-        if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) {
-            setSelection(node, selectionStart, selectionEnd)
+        // Same rationale as applyExpansion: only trust ACTION_SET_TEXT on native EditText.
+        val nativeEditor = isNativeEditText(node)
+        if (nativeEditor && writeViaSetText(node, newText, selectionStart, selectionEnd)) {
             return true
         }
-        if (!settings.pasteFallbackEnabled) return false
-        return pasteReplacement(
+        val pasted = pasteReplacement(
             node = node,
             start = 0,
             end = originalText.length,
             replacement = newText,
             cursor = selectionStart,
         ) && setSelection(node, selectionStart, selectionEnd)
+        if (pasted) return true
+        // Last-resort fallback for exotic non-native editors that refuse ACTION_PASTE.
+        return !nativeEditor && writeViaSetText(node, newText, selectionStart, selectionEnd)
+    }
+
+    /**
+     * Sends the whole field text through [AccessibilityNodeInfo.ACTION_SET_TEXT] and
+     * commits the resulting selection with the WebView-aware retry helper.
+     * Returns false if the editor rejected the action.
+     */
+    private fun writeViaSetText(
+        node: AccessibilityNodeInfo,
+        finalText: String,
+        selectionStart: Int,
+        selectionEnd: Int,
+    ): Boolean {
+        val arguments = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, finalText)
+        }
+        if (!node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) return false
+        commitSelectionAfterSetText(node, selectionStart, selectionEnd)
+        return true
     }
 
     private fun clearExpansionUndo() {
@@ -2222,6 +2330,8 @@ class ExpansionAccessibilityService : AccessibilityService() {
         private const val CLIPBOARD_OVERLAY_SETTLE_MS = 100L
         private const val SUGGESTION_VALIDATION_DELAY_MS = 140L
         private const val CLIPBOARD_RESTORE_DELAY_MS = 250L
+        /** Two frames at 60 Hz — enough for Blink to finish applying ACTION_SET_TEXT. */
+        private const val WEBVIEW_SELECTION_RETRY_DELAY_MS = 32L
         private const val MAX_SUGGESTIONS = 24
         private const val MAX_BROWSE_SUGGESTIONS = 200
         private const val MAX_SUGGESTION_LENGTH = 32
