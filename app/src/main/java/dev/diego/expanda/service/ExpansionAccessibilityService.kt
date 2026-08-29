@@ -175,8 +175,21 @@ class ExpansionAccessibilityService : AccessibilityService() {
             val settings = settingsRepository.settings.value
             if (!settings.expansionEnabled || settings.isPaused || packageName in settings.globallyExcludedPackages) return
 
-            val text = node.text?.toString() ?: event.text.firstOrNull()?.toString() ?: return
-            val cursor = node.textSelectionEnd.takeIf { it in 0..text.length } ?: text.length
+            // Prefer the event's fresh text over node.text: WebView-based editors (Gmail, Chrome,
+            // Obsidian) throttle content-changed events, so the AccessibilityService cache can
+            // return stale text (e.g. ";t" when the user just typed ";tim") for hundreds of ms.
+            val text = AccessibilityTextSnapshot.text(
+                eventTexts = event.text.firstOrNull(),
+                nodeText = node.text,
+                showingHint = node.isShowingHintText,
+            ) ?: return
+            val cursor = AccessibilityTextSnapshot.cursor(
+                text = text,
+                eventFromIndex = event.fromIndex,
+                eventAddedCount = event.addedCount,
+                eventRemovedCount = event.removedCount,
+                nodeSelectionEnd = node.textSelectionEnd,
+            )
             val selectionStart = node.textSelectionStart.takeIf { it in 0..text.length } ?: cursor
             val activeAnchor = createSuggestionAnchor(node, packageName)
             when (reversibleExpansion?.let {
