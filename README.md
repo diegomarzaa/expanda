@@ -13,11 +13,11 @@
   </p>
 </div>
 
-Send custom messages with a trigger. Want to quickly type out the current date in a specific format? Or do you want your emojis to replace your triggers? You can do it all cross platform with espanso but now on android too with this app!
-
 <p align="center">
     <a href="https://github.com/diegomarzaa/expanda/releases/latest"><img src="https://raw.githubusercontent.com/andOTP/andOTP/master/assets/badges/get-it-on-github.png" height="80"></a>
   </p>
+
+Send custom messages with a trigger. Want to quickly type out the current date in a specific format? Or do you want your emojis to replace your triggers? You can do it all cross platform with espanso but now on android too with this app!
 
 Expanda saves you from typing the same things over and over. 
 
