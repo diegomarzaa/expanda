@@ -4,7 +4,7 @@ Expanda follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.3.1] - unreleased
+## [0.3.1] - 2026-08-29
 
 Compatibility and reliability release. Expansion now works in more WebView-based
 editors, and both the caret position and the suggestion popup match what you typed
