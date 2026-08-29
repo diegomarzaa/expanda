@@ -10,6 +10,7 @@
     <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&amp;logoColor=white" alt="Android 8.0 or newer">
     <img src="https://img.shields.io/badge/Internet_permission-none-5c6bc0" alt="No Internet permission">
     <img src="https://img.shields.io/badge/Ads_%26_analytics-none-5c6bc0" alt="No ads or analytics">
+    <a href="https://ko-fi.com/diegomarza"><img src="https://img.shields.io/badge/Ko--fi-Support_Expanda-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
   </p>
 </div>
 
@@ -150,6 +151,10 @@ See [CHANGELOG.md](CHANGELOG.md) for release history and [SECURITY.md](SECURITY.
 I started Expanda because I could not find an open-source Android text expander that covered the workflow I wanted. The project also became a way to learn about accessibility services, background execution, overlays and Android text editing.
 
 [Typing Hero](https://typinghero.app/) provided the main product and workflow reference. [Expandroid](https://github.com/lochidev/Expandroid) also influenced the project. Expanda is an independent implementation and is not affiliated with either project.
+
+## Support
+
+If Expanda is useful to you, consider [buying me a coffee on Ko-fi](https://ko-fi.com/diegomarza).
 
 ## Contributing
 
