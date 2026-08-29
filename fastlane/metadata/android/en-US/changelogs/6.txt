@@ -1,0 +1,9 @@
+Compatibility & reliability release.
+
+Fixed:
+- Stale suggestion highlight in Gmail, Chrome, Obsidian and other WebView editors.
+- Cursor jumping to the start of the field after expansion in Gmail-style composers.
+- Text corruption in WebView editors (Discord, Chrome, Capacitor apps).
+- Suggestion popup silently doing nothing when tapped.
+
+Known limitations documented in the README: Obsidian's cursor placement, Google Docs (canvas), Chrome address bar.

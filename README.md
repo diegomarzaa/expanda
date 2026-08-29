@@ -113,9 +113,27 @@ The clipboard history and local usage statistics are enabled by default and can 
 
 ## Compatibility and limitations
 
-Android apps, keyboards and manufacturer customizations expose editable fields in different ways. Direct replacement can fail in some editors; the optional compatibility fallback temporarily uses and restores the clipboard for those cases.
+Expanda works in any app that exposes its editable fields through Android's Accessibility API. That covers the vast majority of native apps (WhatsApp, Telegram, Gmail, Discord, Google Calendar, most notes apps, Chrome web pages, etc.). A few apps route text through their own document model or a canvas, which Android's Accessibility API cannot fully reach; those are documented below.
 
-Some manufacturers stop accessibility services during background use. Expanda can open the relevant Android battery settings, but the exact option name depends on the device.
+**Works well**
+
+- Native `EditText` widgets (WhatsApp, Telegram, Gmail compose, Discord, Google Calendar, Xiaomi Notes)
+- Most WebView-based editors (Chrome page inputs, Capacitor / Cordova apps)
+
+**Partial**
+
+- **Obsidian mobile**: the app wraps CodeMirror in a Capacitor bridge that reports itself as a plain `EditText` to Android. Expansions do fire, but the cursor sometimes lands in the wrong position and the undo-with-backspace is unreliable. Fixing this properly needs the newer `FLAG_INPUT_METHOD_EDITOR` API and is tracked as a future improvement.
+- **Chrome address bar**: Chrome never emits `TYPE_VIEW_TEXT_CHANGED` for the omnibox, so triggers typed there are not detected. Page inputs inside Chrome do work.
+- **Xiaomi Notes**: expansions work but newlines can be dropped by the app's own formatting layer.
+
+**Doesn't work**
+
+- **Google Docs / Sheets / Slides**: they draw the document on a canvas and expose no editable text to accessibility. There is no reliable way to expand inside them today.
+- Any editor that suppresses accessibility events entirely (some secure keyboards, password managers, banking apps). This is intentional on their side; Expanda skips password fields on purpose.
+
+**OEM background restrictions**
+
+Some manufacturers stop accessibility services when the app hasn't been used for a while. Expanda can open the relevant Android battery settings, but the exact option name depends on the device.
 
 Please use the [bug report template](https://github.com/diegomarzaa/expanda/issues/new?template=bug-report.yml) for compatibility problems. Include the Android version, device, keyboard, target app and exact steps without attaching private text.
 
@@ -142,7 +160,7 @@ Release signing uses a local, ignored `signing.properties` file. The repository 
 
 ## Project status
 
-Current release: **0.3.0**. It rebuilds Expanda around Espanso-compatible YAML, a new match model, tutorial onboarding, a Playground, a Source tab, and full local backups. Upgrading from 0.2.0 migrates your snippets automatically; syntax changes are documented in [CHANGELOG.md](CHANGELOG.md).
+Current release: **0.3.1**. It rebuilds Expanda around Espanso-compatible YAML, a new match model, tutorial onboarding, a Playground, a Source tab, and full local backups. Upgrading from 0.2.0 migrates your snippets automatically; syntax changes are documented in [CHANGELOG.md](CHANGELOG.md).
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and [SECURITY.md](SECURITY.md) for private vulnerability reports.
 

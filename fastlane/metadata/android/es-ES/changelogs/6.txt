@@ -1,0 +1,9 @@
+Versión de compatibilidad y fiabilidad.
+
+Corregido:
+- Resaltado de sugerencia obsoleto en Gmail, Chrome, Obsidian y otros editores WebView.
+- El cursor saltaba al inicio del campo después de la expansión en redactores al estilo Gmail.
+- Corrupción de texto en editores WebView (Discord, Chrome, apps de Capacitor).
+- La ventana emergente de sugerencias no hacía nada al tocarla.
+
+Limitaciones conocidas documentadas en el README: la posición del cursor en Obsidian, Google Docs (canvas), barra de direcciones de Chrome.

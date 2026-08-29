@@ -4,6 +4,25 @@ Expanda follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-29
+
+Compatibility and reliability release. Expansion now works in more WebView-based
+editors, and both the caret position and the suggestion popup match what you typed
+in editors that throttle accessibility events.
+
+### Fixed
+
+- **Stale suggestion highlight** in WebView-based editors (Gmail compose, Chrome, Obsidian): we now read the text from the accessibility event itself instead of the framework cache.
+- **Caret jumping to position 0** after expansion in Gmail-style composers: the service now clears the accessibility cache, refreshes the node, and reapplies the selection on the next frame if it drifted from what we requested.
+- **Text corruption in WebView editors** (Discord, Chrome, most Capacitor apps): expansions in non-native editors now go through `ACTION_PASTE` first (which Blink treats as a real paste event), keeping `ACTION_SET_TEXT` as a fallback. Native `EditText` widgets still take the fast path.
+- **Suggestion tap sometimes doing nothing**: tapping a snippet or action in the suggestion popup used to silently return when the accessibility cache reported outdated text. Now we refresh the node before reading, and if the typed prefix no longer matches the trigger we fall back to inserting the trigger at the caret instead of dropping the tap.
+
+### Known limitations
+
+- **Obsidian** still expands with the caret in the wrong position. Its Capacitor bridge desyncs with both `ACTION_SET_TEXT` and `ACTION_PASTE`, so a proper fix will need the `FLAG_INPUT_METHOD_EDITOR` API (Android 13+).
+- **Google Docs** and other canvas-based editors do not expose text through accessibility at all; expansions don't fire there.
+- **Chrome address bar** never emits text-changed events; a follow-up may add `TYPE_WINDOW_CONTENT_CHANGED` support.
+
 ## [0.3.0] - 2026-08-29
 
 Major release. Rebuilt around Espanso-compatible matches and local-first storage, improved UI and a full onboarding/tutorial flow.
