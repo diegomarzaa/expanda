@@ -1840,26 +1840,39 @@ class ExpansionAccessibilityService : AccessibilityService() {
             hideSuggestions()
             return
         }
+        // Drop any cached snapshot the framework may still be serving before we
+        // resolve the editor; suggestion taps often arrive right after a burst
+        // of keystrokes, and stale text used to make matchRange fail silently.
+        clearAccessibilityCache()
         val node = findAnchoredEditor(anchor) ?: run {
+            Log.d(TAG, "applySuggestion: anchored editor gone, hiding popup")
             hideSuggestions()
             return
         }
         try {
-            if (!node.isEditable || node.isPassword || isPasswordInput(node.inputType)) return
+            if (!node.isEditable || node.isPassword || isPasswordInput(node.inputType)) {
+                Log.d(TAG, "applySuggestion: node no longer editable, skipping")
+                return
+            }
+            runCatching { node.refresh() }
             val text = editableText(node)
             val cursor = node.textSelectionEnd.takeIf { it in 0..text.length } ?: text.length
-            val typed = currentToken(text, cursor)
+            val range = SuggestionApplyLocator.locate(
+                text = text,
+                cursor = cursor,
+                trigger = trigger,
+                browseMode = browseMode,
+            ) ?: run {
+                Log.d(TAG, "applySuggestion: cursor $cursor out of range for text of length ${text.length}")
+                return
+            }
             val currentSettings = settingsRepository.settings.value
-            val minimumCharacters = currentSettings.suggestionMinChars.coerceIn(1, MAX_SUGGESTION_LENGTH)
-            if (!browseMode && !SuggestionMatcher.canShow(typed, minimumCharacters)) return
-            if (!browseMode && SuggestionMatcher.matchRange(trigger, typed, currentSettings.matchFromBeginning) == null) return
-            val start = if (browseMode) cursor else cursor - typed.length
             val match = ExpansionMatch(
                 match = textMatch,
-                replaceFrom = start,
-                replaceTo = cursor,
+                replaceFrom = range.start,
+                replaceTo = range.end,
                 trailingDelimiter = "",
-                matchedText = if (browseMode) trigger else typed,
+                matchedText = range.matchedText,
             )
             if (textMatch.selectionMode == TemplateSelectionMode.MANUAL && textMatch.replacements.size > 1) {
                 @Suppress("DEPRECATION")
@@ -1884,12 +1897,14 @@ class ExpansionAccessibilityService : AccessibilityService() {
             hideSuggestions()
             return
         }
+        clearAccessibilityCache()
         val node = findAnchoredEditor(anchor) ?: run {
             hideSuggestions()
             return
         }
         try {
             if (!node.isEditable || node.isPassword || isPasswordInput(node.inputType)) return
+            runCatching { node.refresh() }
             val currentSettings = settingsRepository.settings.value
             val enabledActions = actionSettingsStore.enabledIds.value
             if (!currentSettings.suggestionShowActions || shownDefinition.id !in enabledActions) return
@@ -1900,19 +1915,22 @@ class ExpansionAccessibilityService : AccessibilityService() {
                 ?.takeIf(String::isNotBlank)
                 ?.let { baseDefinition.copy(shortcut = it) }
                 ?: baseDefinition
-            val originalText = node.text?.toString() ?: return
+            val originalText = node.text?.toString() ?: ""
             val cursor = node.textSelectionEnd.takeIf { it in 0..originalText.length } ?: originalText.length
             val minimumCharacters = currentSettings.suggestionMinChars.coerceIn(1, MAX_SUGGESTION_LENGTH)
+            // Same rationale as applySuggestion: never silently drop the tap. If the
+            // typed prefix no longer matches, treat the tap as "insert the shortcut
+            // at the caret and run the action against that".
             val typed = actionSuggestionPrefix(
                 shortcut = definition.shortcut,
                 text = originalText,
                 cursor = cursor,
                 minimumCharacters = minimumCharacters,
                 fromBeginning = currentSettings.matchFromBeginning,
-            ) ?: return
-
-            val commandStart = cursor - typed.length
-            val commandText = originalText.replaceRange(commandStart, cursor, definition.shortcut)
+            )
+            val commandStart = if (typed != null) cursor - typed.length else cursor
+            val commandEnd = cursor
+            val commandText = originalText.replaceRange(commandStart, commandEnd, definition.shortcut)
             val commandCursor = commandStart + definition.shortcut.length
             val outcome = actionEngine.execute(
                 ActionContext(
