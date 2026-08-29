@@ -4,7 +4,6 @@
   <p><strong>Type a shortcut. Insert anything.</strong><br>A free, offline, text expander for Android that works across your apps.</p>
 
   <p>
-    <a href="https://github.com/diegomarzaa/expanda/releases/latest"><img src="https://img.shields.io/github/v/release/diegomarzaa/expanda?label=Download&amp;logo=github" alt="Latest release"></a>
     <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22dev.diego.expanda%22%2C%22url%22%3A%2F%2Fgithub.com%2Fdiegomarzaa%2Fexpanda%22%2C%22author%22%3A%22diegomarzaa%22%2C%22name%22%3A%22Expanda%22%7D"><img src="https://img.shields.io/badge/Get_it_on-Obtainium-2f80ed" alt="Get Expanda on Obtainium"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-2ea44f.svg" alt="GPLv3 License"></a>
     <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&amp;logoColor=white" alt="Android 8.0 or newer">
@@ -13,6 +12,12 @@
     <a href="https://ko-fi.com/diegomarza"><img src="https://img.shields.io/badge/Ko--fi-Support_Expanda-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
   </p>
 </div>
+
+Send custom messages with a trigger. Want to quickly type out the current date in a specific format? Or do you want your emojis to replace your triggers? You can do it all cross platform with espanso but now on android too with this app!
+
+<p align="center">
+    <a href="https://github.com/diegomarzaa/expanda/releases/latest"><img src="https://raw.githubusercontent.com/andOTP/andOTP/master/assets/badges/get-it-on-github.png" height="80"></a>
+  </p>
 
 Expanda saves you from typing the same things over and over. 
 
