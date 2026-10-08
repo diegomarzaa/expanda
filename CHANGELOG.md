@@ -3,6 +3,8 @@
 Expanda follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+### Added
+- Optional Git sync for espanso match files from GitHub or an open-source Forgejo/Gitea host such as Codeberg (public repositories need no token; adds Internet permission; off until configured).
 
 ## [0.3.2] - 2026-09-09
 ### Fixed

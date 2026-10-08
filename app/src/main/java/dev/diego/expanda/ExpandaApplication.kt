@@ -43,6 +43,8 @@ class ExpandaApplication : Application() {
         onboardingStore
         actionSettingsStore
         clipboardMonitor.start()
+        dev.diego.expanda.gitsync.GitSyncScheduler.reconcile(this)
+        dev.diego.expanda.gitsync.GitSyncForeground.register(this)
         applicationScope.launch {
             matchRepository.refresh()
             espansoSourceRepository.initialize()

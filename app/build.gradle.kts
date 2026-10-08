@@ -74,6 +74,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.snakeyaml:snakeyaml-engine:2.10")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation("androidx.lifecycle:lifecycle-process:2.10.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

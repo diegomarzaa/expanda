@@ -1,8 +1,8 @@
 # Privacy
 
-Effective date: 25 August 2026
+Effective date: 8 October 2026
 
-Expanda processes text on your Android device. The app does not declare the Android `INTERNET` permission and contains no advertising, analytics or tracking SDKs.
+Expanda processes text on your Android device. The app uses the Android `INTERNET` permission only for the optional Git sync, and contains no advertising, analytics or tracking SDKs.
 
 ## Data Expanda processes
 
@@ -18,6 +18,7 @@ Expanda stores the following data in its private app storage:
 - App settings, including excluded apps and the saved suggestion-popup position.
 - Expansion counts and, while local statistics are enabled, the package name and time of each expansion.
 - Up to 200 recent non-pinned clipboard entries while clipboard history is enabled, plus any entries you pin.
+- If you configure the optional Git sync: the git host, repository, branch and (optional) access token you enter, the commit last synced, and up to three automatic backups of your snippets and settings taken before the first sync replaces them.
 
 Clipboard history and local statistics are enabled by default. You can disable either option in Settings. Disabling an option stops new collection but does not delete data already stored.
 
@@ -31,7 +32,7 @@ The optional compatibility paste fallback uses the system clipboard when an edit
 
 ## Network access and sharing
 
-Expanda does not declare `INTERNET`, so it cannot send data through Android's standard networking APIs. The app contains no remote account, sync, telemetry or crash-reporting service.
+Expanda declares `INTERNET` only for the optional Git sync. Until you configure it, the app makes no network requests. Once configured, it sends HTTPS requests only to the git host you configure (for example GitHub or an open-source Forgejo/Gitea server such as Codeberg), using the token you provide if any. Only requests to read your configured repository are sent (that host sees your IP address and user agent). No snippet text or other app data is sent. The app contains no account, telemetry or crash-reporting service.
 
 An Android text action can open the system share sheet. You choose the receiving application and control whether to send the selected text. Expanda does not select a recipient or transmit the text itself.
 
@@ -45,7 +46,7 @@ Full backups contain snippets, variables, settings, excluded-app package names a
 
 ## Data deletion
 
-You can delete snippets inside the app and clear the complete clipboard history or usage statistics from Settings. **Reset Expanda**, Android's **Clear storage** action or uninstalling Expanda removes its local data and settings from the device.
+You can delete snippets inside the app and clear the complete clipboard history or usage statistics from Settings. **Reset Expanda** removes the snippets and settings, and also the Git sync repository, token and automatic backups, and cancels the scheduled sync. Android's **Clear storage** action or uninstalling Expanda removes all local data from the device.
 
 Delete exported JSON, YAML or CSV files separately from the location where you saved them.
 

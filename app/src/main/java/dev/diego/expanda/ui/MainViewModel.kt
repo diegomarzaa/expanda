@@ -409,6 +409,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         settingsRepository.reset()
         actionSettingsStore.reset()
         onboardingStore.restart()
+        dev.diego.expanda.gitsync.GitSyncData.clearAll(app)
         onComplete()
     }
 

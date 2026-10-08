@@ -1,6 +1,6 @@
 <p>Expanda is a free and open-source text expander for Android. Create reusable snippets and insert them in editable fields across your apps.</p>
 
-<p>Expanda works on your device and does not declare the Internet permission. It has no accounts, ads, analytics or tracking SDKs.</p>
+<p>Expanda works on your device and uses the Internet only for the optional Git sync (GitHub, Codeberg or another Forgejo/Gitea host you configure). It has no accounts, ads, analytics or tracking SDKs.</p>
 
 <p>Features:</p>
 <ul>

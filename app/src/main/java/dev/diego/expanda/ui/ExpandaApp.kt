@@ -1129,6 +1129,12 @@ private fun SettingsScreen(
             }
         }
         item {
+            dev.diego.expanda.gitsync.GitSyncCard(
+                locallyLinked = state.settings.espansoFolderUri != null,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+        item {
             Text(
                 "Expanda backup",
                 modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp),
@@ -1174,7 +1180,7 @@ private fun SettingsScreen(
             ListItem(
                 leadingContent = { Icon(Icons.Default.Security, null) },
                 headlineContent = { Text("Privacy") },
-                supportingContent = { Text("All snippets stay on this device. Password fields are ignored. No analytics or network access.") },
+                supportingContent = { Text("Snippets stay on this device. Password fields are ignored. No analytics. Network is used only by the optional Git sync, to the git host you configure (e.g. GitHub, Codeberg).") },
             )
         }
         item {

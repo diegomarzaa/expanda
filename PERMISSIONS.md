@@ -1,6 +1,6 @@
 # Permissions
 
-Expanda uses a small set of Android capabilities to expand text across apps. It does not request Internet, location, camera, microphone, contacts or account access.
+Expanda uses a small set of Android capabilities to expand text across apps. It uses the network only for the optional Git sync (see `INTERNET` below), and does not request location, camera, microphone, contacts or account access.
 
 ## Accessibility service
 
@@ -32,6 +32,22 @@ Expanda continues to work without the exemption while Android keeps its service 
 
 Expanda uses this permission for optional haptic feedback after an expansion. Haptic feedback is disabled by default and can be changed in Settings.
 
+## `android.permission.INTERNET`
+
+Used only by the optional Git sync, only for HTTPS requests to the git host you configure (for example GitHub or Codeberg), and only after you configure it. Snippets, typed text, clipboard contents and usage statistics are never sent. Without a configured repository Expanda makes no network requests.
+
+## `android.permission.ACCESS_NETWORK_STATE`
+
+Lets the background Git sync wait until a network connection is available before it runs.
+
+## `android.permission.WAKE_LOCK`
+
+Declared by AndroidX WorkManager, which schedules the periodic Git sync check. It keeps the device awake only while that short check runs.
+
+## `android.permission.RECEIVE_BOOT_COMPLETED`
+
+Declared by AndroidX WorkManager so the scheduled Git sync check is restored after the device restarts. Expanda has no other boot-time behavior.
+
 ## Clipboard
 
 Modern Android versions expose clipboard access through the system API rather than a manifest permission. Expanda uses it for:
@@ -49,4 +65,4 @@ The `BIND_QUICK_SETTINGS_TILE` capability protects Expanda's on/off tile. Androi
 
 ## Capabilities Expanda does not request
 
-The manifest does not declare permissions for Internet access, location, camera, microphone, contacts, SMS, phone calls or external-storage browsing. Android's document picker grants access only to the import or export file you choose.
+The manifest does not declare permissions for location, camera, microphone, contacts, SMS, phone calls, foreground services or external-storage browsing. Android's document picker grants access only to the import or export file you choose.

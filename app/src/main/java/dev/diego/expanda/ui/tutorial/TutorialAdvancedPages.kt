@@ -510,7 +510,7 @@ internal fun OpenSourceProjectAnimation() {
                     )
                 }
                 AnimatedVisibility(visible = showLocal, enter = fadeIn(tween(420)) + slideInVertically { it / 4 }) {
-                    ProjectValue(Icons.Default.Lock, "No Internet permission, ads or analytics")
+                    ProjectValue(Icons.Default.Lock, "Internet only for optional Git sync, no ads or analytics")
                 }
                 AnimatedVisibility(visible = showSource, enter = fadeIn(tween(420)) + slideInVertically { it / 4 }) {
                     ProjectValue(Icons.Default.Code, "GPLv3 source code you can inspect and change")

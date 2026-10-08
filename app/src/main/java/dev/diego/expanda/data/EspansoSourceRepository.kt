@@ -23,6 +23,9 @@ data class EspansoSourceImportResult(
     val issues: List<CompatibilityIssue>,
 )
 
+/** Thrown by [EspansoSourceRepository.importFiles] with `requireUnlinked` when a local folder is linked. */
+class SourceFolderLinkedException : IllegalStateException("A local folder is linked")
+
 data class SourceWorkspaceState(
     val linked: Boolean = false,
     val issue: String? = null,
@@ -111,8 +114,11 @@ class EspansoSourceRepository(
     suspend fun importFiles(
         incoming: List<EspansoSourceFile>,
         replaceAll: Boolean,
+        requireUnlinked: Boolean = false,
     ): EspansoSourceImportResult = withContext(io) {
         mutation.withLock {
+            // Checked under the same lock as linkFolder, so a link made meanwhile cannot be overwritten.
+            if (requireUnlinked && linkedUri() != null) throw SourceFolderLinkedException()
             val normalized = normalize(incoming)
             require(normalized.isNotEmpty()) { "No Espanso YAML files found" }
             val current = readAuthoritative()

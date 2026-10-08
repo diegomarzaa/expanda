@@ -86,7 +86,7 @@ internal fun AboutExpandaSheet(onDismiss: () -> Unit) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Local and open", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Expanda runs on your device and has no Internet permission, accounts, ads or analytics. " +
+                        "Expanda runs on your device and uses the Internet only for optional Git sync (to the host you configure), and has no accounts, ads or analytics. " +
                             "Its source is public, and GPLv3 keeps distributed changes open.",
                         style = MaterialTheme.typography.bodyMedium,
                     )

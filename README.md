@@ -10,7 +10,7 @@
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-2ea44f.svg" alt="GPLv3 License"></a>
     <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&amp;logoColor=white" alt="Android 8.0 or newer">
-    <img src="https://img.shields.io/badge/Internet_permission-none-5c6bc0" alt="No Internet permission">
+    <img src="https://img.shields.io/badge/Internet-optional_Git_sync_only-5c6bc0" alt="Internet used only by optional Git sync">
     <img src="https://img.shields.io/badge/Ads_%26_analytics-none-5c6bc0" alt="No ads or analytics">
     <a href="https://ko-fi.com/diegomarza"><img src="https://img.shields.io/badge/Ko--fi-Support_Expanda-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
   </p>
@@ -95,6 +95,7 @@ Set them up once. Save yourself thousands of taps.
 **Sync, backup & sharing**
 - Espanso-compatible YAML — share a `match/` folder with your desktop setup, edits go both ways
 - Full app backup, plus YAML and CSV import/export
+- [Git sync from a repository](docs/git-sync.md) (Forgejo/Gitea such as Codeberg, or GitHub)
 
 **Control & polish**
 - Per-app exclusions (skip banking apps, password managers, whatever you want)
@@ -110,8 +111,12 @@ Expanda uses only these Android permissions and protected capabilities:
 | Accessibility service | Reads changes in active editable fields and replaces matching shortcuts. Password fields are ignored. |
 | Battery optimization exemption request | Opens Android's battery settings so you can allow reliable background operation. |
 | Vibration | Provides optional haptic feedback after an expansion. |
+| `INTERNET` | HTTPS requests to the git host you configure, only for the optional Git sync. |
+| `ACCESS_NETWORK_STATE` | Lets the background Git sync wait for a network connection. |
+| `WAKE_LOCK` | Added by AndroidX WorkManager so the periodic Git sync check can finish while the device is idle. |
+| `RECEIVE_BOOT_COMPLETED` | Added by AndroidX WorkManager so the scheduled Git sync check resumes after a reboot. |
 
-The Accessibility service is a special service capability rather than a regular manifest permission. Expanda does **not** declare `INTERNET`, so the app cannot send snippets, typed text, clipboard history or usage statistics over the network through Android's standard networking APIs.
+The Accessibility service is a special service capability rather than a regular manifest permission. Expanda declares `INTERNET` only for the optional Git sync. It is used only for HTTPS requests to the git host you configure (for example GitHub or Codeberg), and only after you configure sync. Snippets, typed text, clipboard history and usage statistics are never sent.
 
 The clipboard history and local usage statistics are enabled by default and can be disabled in Settings. See [Privacy](PRIVACY.md) for stored data and deletion instructions, and [Permissions](PERMISSIONS.md) for the complete permission rationale.
 
